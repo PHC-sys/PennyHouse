@@ -4,11 +4,16 @@ import Link from "next/link";
 import { useAccount, useConnect, useDisconnect } from "wagmi";
 import { injected } from "wagmi/connectors";
 import { shortAddr } from "@/lib/utils";
+import { useEffect, useState } from "react";
 
 export function Navbar() {
   const { address, isConnected } = useAccount();
   const { connect } = useConnect();
   const { disconnect } = useDisconnect();
+
+  // 서버/클라이언트 hydration 불일치 방지
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   return (
     <nav className="border-b border-gray-800 px-4 py-4">
@@ -28,8 +33,10 @@ export function Navbar() {
             채권 발행
           </Link>
 
-          {/* 지갑 연결 */}
-          {isConnected ? (
+          {/* 지갑 연결 — mounted 후에만 렌더 */}
+          {!mounted ? (
+            <div className="w-28 h-8 bg-gray-800 rounded-lg animate-pulse" />
+          ) : isConnected ? (
             <div className="flex items-center gap-3">
               <span className="text-sm text-green-400 font-mono">
                 {shortAddr(address!)}
