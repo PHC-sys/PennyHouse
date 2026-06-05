@@ -388,9 +388,10 @@ Issuer         : 0x914624E652DfB66edF49177d11cB7F26828f7392
 
 ```
 Network      : Ethereum Sepolia (ChainID: 11155111)
-BondFactory  : [배포 후 기록]
+BondFactory  : 0xbAc2F972EFc5a29033B48476BeAF24841464cdF3
 USDC         : 0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238
-Issuer       : 0x914624E652DfB66edF49177d11cB7F26828f7392
+Deployer     : 0x914624E652DfB66edF49177d11cB7F26828f7392
+Etherscan    : https://sepolia.etherscan.io/address/0xbAc2F972EFc5a29033B48476BeAF24841464cdF3
 ```
 
 ### BondFactory + StructuredBond (v3 — HyperEVM)
