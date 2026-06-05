@@ -5,7 +5,7 @@ import "./StructuredBond.sol";
 
 contract BondFactory {
 
-    // ── 허용된 USDC 주소 화이트리스트 ───────────────────────
+    // ── 운영자 / USDC 화이트리스트 ──────────────────────────
     address public owner;
     mapping(address => bool) public allowedUSDC;
 
@@ -13,15 +13,28 @@ contract BondFactory {
     address[] public allBonds;
     mapping(address => address[]) public bondsByIssuer;
 
-    // ── 이벤트 ───────────────────────────────────────────────
+    // ── 파라미터 구조체 (stack too deep 방지) ────────────────
+    struct BondParams {
+        string   name;
+        string   symbol;
+        address  opsWallet;
+        uint256  maxNotional;
+        uint256  couponRateBps;
+        uint256  subscriptionStart;
+        uint256  issueDate;
+        uint256  reserveBufferDays;
+        uint256[] paymentDates;
+        uint256[] amountsPerToken;
+        bool[]    isPrincipal;
+    }
+
+    // ── 이벤트 ──────────────────────────────────────────────
     event BondCreated(
         address indexed issuer,
         address indexed bondAddress,
         string  name,
         string  symbol,
-        uint256 notional,
-        uint256 couponRateBps,
-        uint256 maturityTimestamp
+        uint256 maxNotional
     );
     event USDCAllowed(address indexed token, bool allowed);
 
@@ -34,36 +47,36 @@ contract BondFactory {
         _;
     }
 
-    // ── USDC 화이트리스트 관리 (플랫폼 운영자만) ────────────
+    // ── USDC 화이트리스트 (운영자만) ────────────────────────
     function setAllowedUSDC(address token, bool allowed) external onlyOwner {
         require(token != address(0), "invalid token");
         allowedUSDC[token] = allowed;
         emit USDCAllowed(token, allowed);
     }
 
-    // ── 채권 발행 (누구나 호출 가능) ────────────────────────
+    // ── 채권 발행 (누구나) ───────────────────────────────────
     function createBond(
-        string  memory name,
-        string  memory symbol,
         address usdc,
-        address opsWallet,
-        uint256 notional,
-        uint256 couponRateBps,
-        uint256 maturityTimestamp
+        BondParams calldata p
     ) external returns (address) {
-        require(bytes(name).length > 0,   "name required");
-        require(bytes(symbol).length > 0, "symbol required");
-        require(allowedUSDC[usdc],        "usdc not whitelisted");
+        require(allowedUSDC[usdc],          "usdc not whitelisted");
+        require(bytes(p.name).length > 0,   "name required");
+        require(bytes(p.symbol).length > 0, "symbol required");
 
         StructuredBond bond = new StructuredBond(
-            name,
-            symbol,
-            msg.sender,
+            p.name,
+            p.symbol,
+            msg.sender,   // issuer = 호출자
             usdc,
-            opsWallet,
-            notional,
-            couponRateBps,
-            maturityTimestamp
+            p.opsWallet,
+            p.maxNotional,
+            p.couponRateBps,
+            p.subscriptionStart,
+            p.issueDate,
+            p.reserveBufferDays,
+            p.paymentDates,
+            p.amountsPerToken,
+            p.isPrincipal
         );
 
         allBonds.push(address(bond));
@@ -72,17 +85,15 @@ contract BondFactory {
         emit BondCreated(
             msg.sender,
             address(bond),
-            name,
-            symbol,
-            notional,
-            couponRateBps,
-            maturityTimestamp
+            p.name,
+            p.symbol,
+            p.maxNotional
         );
 
         return address(bond);
     }
 
-    // ── 조회 함수 ────────────────────────────────────────────
+    // ── 조회 ─────────────────────────────────────────────────
     function getAllBonds() external view returns (address[] memory) {
         return allBonds;
     }

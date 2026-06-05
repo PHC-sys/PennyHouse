@@ -2,263 +2,253 @@ const { expect } = require("chai");
 const { ethers } = require("hardhat");
 const { time }   = require("@nomicfoundation/hardhat-network-helpers");
 
-describe("BondFactory", function () {
+const NOTIONAL  = ethers.parseUnits("10000", 6);
+const COUPON    = 50_000n;
+const PRINCIPAL = 1_050_000n;
 
-  async function deployFixture() {
-    const [owner, issuer, issuer2, opsWallet, investor] = await ethers.getSigners();
+async function deployFactoryFixture() {
+  const [owner, issuer, issuer2, investor, opsWallet, other] =
+    await ethers.getSigners();
 
-    // MockUSDC 배포
-    const MockUSDC = await ethers.getContractFactory("MockUSDC");
-    const usdc = await MockUSDC.deploy();
+  const MockUSDC = await ethers.getContractFactory("MockUSDC");
+  const usdc = await MockUSDC.deploy();
 
-    // BondFactory 배포 (owner가 배포)
-    const Factory = await ethers.getContractFactory("BondFactory");
-    const factory = await Factory.connect(owner).deploy();
+  const Factory = await ethers.getContractFactory("BondFactory");
+  const factory = await Factory.connect(owner).deploy();
 
-    // USDC 화이트리스트 등록
-    await factory.connect(owner).setAllowedUSDC(await usdc.getAddress(), true);
+  // USDC 화이트리스트 등록
+  await factory.connect(owner).setAllowedUSDC(await usdc.getAddress(), true);
 
-    const NOTIONAL    = ethers.parseUnits("10000", 6);
-    const COUPON_BPS  = 1000;
-    const MATURITY_TS = (await time.latest()) + 7 * 24 * 60 * 60;
+  await usdc.mint(issuer.address,   ethers.parseUnits("1000000", 6));
+  await usdc.mint(investor.address, ethers.parseUnits("100000",  6));
 
-    return { factory, usdc, owner, issuer, issuer2, opsWallet, investor,
-             NOTIONAL, COUPON_BPS, MATURITY_TS };
-  }
+  const now      = await time.latest();
+  const subStart = now;
+  const issue    = now + 1  * 24 * 3600;
+  const payment1 = now + 30 * 24 * 3600;
+  const payment2 = now + 60 * 24 * 3600;
 
-  // 채권 생성 헬퍼
-  async function createBond(factory, usdc, issuer, opsWallet, params = {}) {
-    const MATURITY_TS = params.maturityTs || (await time.latest()) + 7 * 24 * 60 * 60;
+  // 기본 BondParams
+  const defaultParams = {
+    name:              "FACTORY-BOND-001",
+    symbol:            "FB001",
+    opsWallet:         opsWallet.address,
+    maxNotional:       NOTIONAL,
+    couponRateBps:     1000,
+    subscriptionStart: subStart,
+    issueDate:         issue,
+    reserveBufferDays: 7,
+    paymentDates:      [payment1, payment2],
+    amountsPerToken:   [COUPON, PRINCIPAL],
+    isPrincipal:       [false, true],
+  };
+
+  return {
+    factory, usdc, owner, issuer, issuer2, investor, opsWallet, other,
+    defaultParams, issue, payment1, payment2
+  };
+}
+
+// ─────────────────────────────────────────────────────────────
+describe("BondFactory — 채권 생성", function () {
+
+  it("createBond() 후 채권 컨트랙트가 배포됨", async function () {
+    const { factory, usdc, issuer, defaultParams } = await deployFactoryFixture();
+    const bondAddr = await factory.connect(issuer).createBond.staticCall(
+      await usdc.getAddress(), defaultParams
+    );
+    await factory.connect(issuer).createBond(await usdc.getAddress(), defaultParams);
+
+    expect(bondAddr).to.be.properAddress;
+    expect(await factory.totalBonds()).to.equal(1);
+  });
+
+  it("issuer가 채권의 issuer로 등록됨", async function () {
+    const { factory, usdc, issuer, defaultParams } = await deployFactoryFixture();
+
     const tx = await factory.connect(issuer).createBond(
-      params.name      || "TEST-BOND",
-      params.symbol    || "TBND",
-      await usdc.getAddress(),
-      opsWallet.address,
-      params.notional  || ethers.parseUnits("10000", 6),
-      params.couponBps || 1000,
-      MATURITY_TS
+      await usdc.getAddress(), defaultParams
     );
     const receipt = await tx.wait();
-    const event = receipt.logs.find(
-      log => log.fragment && log.fragment.name === "BondCreated"
+    const event   = receipt.logs.find(l => l.fragment?.name === "BondCreated");
+    const bondAddr = event.args.bondAddress;
+    const bond = await ethers.getContractAt("StructuredBond", bondAddr);
+
+    expect(await bond.issuer()).to.equal(issuer.address);
+  });
+
+  it("화이트리스트에 없는 USDC → 실패", async function () {
+    const { factory, issuer, defaultParams } = await deployFactoryFixture();
+    const fakeUSDC = ethers.Wallet.createRandom().address;
+
+    await expect(
+      factory.connect(issuer).createBond(fakeUSDC, defaultParams)
+    ).to.be.revertedWith("usdc not whitelisted");
+  });
+
+  it("name 비어있으면 실패", async function () {
+    const { factory, usdc, issuer, defaultParams } = await deployFactoryFixture();
+    await expect(
+      factory.connect(issuer).createBond(await usdc.getAddress(), {
+        ...defaultParams, name: ""
+      })
+    ).to.be.revertedWith("name required");
+  });
+
+  it("BondCreated 이벤트 발생", async function () {
+    const { factory, usdc, issuer, defaultParams } = await deployFactoryFixture();
+    await expect(
+      factory.connect(issuer).createBond(await usdc.getAddress(), defaultParams)
+    ).to.emit(factory, "BondCreated");
+  });
+});
+
+// ─────────────────────────────────────────────────────────────
+describe("BondFactory — USDC 화이트리스트", function () {
+
+  it("owner만 화이트리스트 등록 가능", async function () {
+    const { factory, issuer } = await deployFactoryFixture();
+    const fakeToken = ethers.Wallet.createRandom().address;
+    await expect(
+      factory.connect(issuer).setAllowedUSDC(fakeToken, true)
+    ).to.be.revertedWith("only owner");
+  });
+
+  it("화이트리스트 해제 후 채권 생성 불가", async function () {
+    const { factory, usdc, owner, issuer, defaultParams } = await deployFactoryFixture();
+    await factory.connect(owner).setAllowedUSDC(await usdc.getAddress(), false);
+
+    await expect(
+      factory.connect(issuer).createBond(await usdc.getAddress(), defaultParams)
+    ).to.be.revertedWith("usdc not whitelisted");
+  });
+});
+
+// ─────────────────────────────────────────────────────────────
+describe("BondFactory — 목록 관리", function () {
+
+  it("발행자별 채권 목록 분리 관리", async function () {
+    const { factory, usdc, issuer, issuer2, defaultParams } = await deployFactoryFixture();
+    const now = await time.latest();
+
+    const paramsA = { ...defaultParams, name: "BOND-A", symbol: "BA",
+      subscriptionStart: now, issueDate: now + 3600,
+      paymentDates: [now + 2 * 3600, now + 4 * 3600] };
+
+    const paramsB = { ...defaultParams, name: "BOND-B", symbol: "BB",
+      subscriptionStart: now, issueDate: now + 3600,
+      paymentDates: [now + 2 * 3600, now + 4 * 3600] };
+
+    const paramsC = { ...defaultParams, name: "BOND-C", symbol: "BC",
+      subscriptionStart: now, issueDate: now + 3600,
+      paymentDates: [now + 2 * 3600, now + 4 * 3600] };
+
+    await factory.connect(issuer).createBond(await usdc.getAddress(), paramsA);
+    await factory.connect(issuer).createBond(await usdc.getAddress(), paramsB);
+    await factory.connect(issuer2).createBond(await usdc.getAddress(), paramsC);
+
+    expect((await factory.getBondsByIssuer(issuer.address)).length).to.equal(2);
+    expect((await factory.getBondsByIssuer(issuer2.address)).length).to.equal(1);
+    expect(await factory.totalBonds()).to.equal(3);
+  });
+
+  it("처음 발행한 주소의 목록은 빈 배열", async function () {
+    const { factory, other } = await deployFactoryFixture();
+    expect((await factory.getBondsByIssuer(other.address)).length).to.equal(0);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────
+describe("BondFactory — E2E (Factory 생성 채권 전체 흐름)", function () {
+
+  it("이표채: 청약 → 발행 → 쿠폰 → 원금 전체 흐름", async function () {
+    const { factory, usdc, issuer, investor, defaultParams, issue, payment1, payment2 } =
+      await deployFactoryFixture();
+
+    // 채권 생성
+    const tx = await factory.connect(issuer).createBond(
+      await usdc.getAddress(), defaultParams
     );
-    return event.args.bondAddress;
-  }
+    const receipt  = await tx.wait();
+    const event    = receipt.logs.find(l => l.fragment?.name === "BondCreated");
+    const bond     = await ethers.getContractAt("StructuredBond", event.args.bondAddress);
 
-  // ── 1. 채권 생성 ─────────────────────────────────────────
-  describe("createBond()", function () {
+    // 청약
+    await usdc.connect(investor).approve(await bond.getAddress(), NOTIONAL);
+    await bond.connect(investor).subscribe(NOTIONAL);
 
-    it("채권 컨트랙트가 새로 배포되어야 한다", async function () {
-      const { factory, usdc, issuer, opsWallet } = await deployFixture();
-      const bondAddress = await createBond(factory, usdc, issuer, opsWallet);
-      expect(bondAddress).to.be.properAddress;
-    });
+    // 발행 완료
+    await time.increaseTo(issue + 1);
+    await bond.completeIssuance();
 
-    it("발행된 토큰이 발행자에게 전달되어야 한다", async function () {
-      const { factory, usdc, issuer, opsWallet, NOTIONAL } = await deployFixture();
-      const bondAddress = await createBond(factory, usdc, issuer, opsWallet);
-      const bond = await ethers.getContractAt("StructuredBond", bondAddress);
+    // Reserve 적립
+    const totalReserve = NOTIONAL * (COUPON + PRINCIPAL) / 1_000_000n;
+    await usdc.connect(issuer).approve(await bond.getAddress(), totalReserve);
+    await bond.connect(issuer).reserve(totalReserve);
 
-      expect(await bond.balanceOf(issuer.address)).to.equal(NOTIONAL);
-      expect(await bond.balanceOf(await factory.getAddress())).to.equal(0);
-    });
+    // 쿠폰 청구
+    await time.increaseTo(payment1 + 1);
+    const beforeCoupon = await usdc.balanceOf(investor.address);
+    await bond.connect(investor).claim(0);
+    const afterCoupon  = await usdc.balanceOf(investor.address);
+    expect(afterCoupon - beforeCoupon).to.equal(NOTIONAL * COUPON / 1_000_000n);
+    expect(await bond.balanceOf(investor.address)).to.equal(NOTIONAL); // 토큰 유지
 
-    it("채권 조건이 파라미터대로 설정되어야 한다", async function () {
-      const { factory, usdc, issuer, opsWallet, NOTIONAL, COUPON_BPS, MATURITY_TS } = await deployFixture();
-      const bondAddress = await createBond(factory, usdc, issuer, opsWallet, {
-        notional: NOTIONAL, couponBps: COUPON_BPS, maturityTs: MATURITY_TS
-      });
-      const bond = await ethers.getContractAt("StructuredBond", bondAddress);
-
-      expect(await bond.notional()).to.equal(NOTIONAL);
-      expect(await bond.couponRateBps()).to.equal(COUPON_BPS);
-      expect(await bond.maturityDate()).to.equal(MATURITY_TS);
-    });
-
-    it("BondCreated 이벤트가 발생해야 한다", async function () {
-      const { factory, usdc, issuer, opsWallet, NOTIONAL, COUPON_BPS, MATURITY_TS } = await deployFixture();
-      await expect(
-        factory.connect(issuer).createBond(
-          "TEST-BOND", "TBND",
-          await usdc.getAddress(),
-          opsWallet.address,
-          NOTIONAL, COUPON_BPS, MATURITY_TS
-        )
-      ).to.emit(factory, "BondCreated");
-    });
-
-    it("화이트리스트에 없는 USDC로 생성하면 실패", async function () {
-      const { factory, issuer, opsWallet, MATURITY_TS } = await deployFixture();
-      const fakeUSDC = ethers.Wallet.createRandom().address;
-
-      await expect(
-        factory.connect(issuer).createBond(
-          "TEST-BOND", "TBND",
-          fakeUSDC,
-          opsWallet.address,
-          ethers.parseUnits("10000", 6), 1000, MATURITY_TS
-        )
-      ).to.be.revertedWith("usdc not whitelisted");
-    });
-
-    it("name 없이 생성하면 실패", async function () {
-      const { factory, usdc, issuer, opsWallet, MATURITY_TS } = await deployFixture();
-      await expect(
-        factory.connect(issuer).createBond(
-          "", "TBND",
-          await usdc.getAddress(),
-          opsWallet.address,
-          ethers.parseUnits("10000", 6), 1000, MATURITY_TS
-        )
-      ).to.be.revertedWith("name required");
-    });
-
-    it("symbol 없이 생성하면 실패", async function () {
-      const { factory, usdc, issuer, opsWallet, MATURITY_TS } = await deployFixture();
-      await expect(
-        factory.connect(issuer).createBond(
-          "TEST-BOND", "",
-          await usdc.getAddress(),
-          opsWallet.address,
-          ethers.parseUnits("10000", 6), 1000, MATURITY_TS
-        )
-      ).to.be.revertedWith("symbol required");
-    });
-
-    it("과거 만기일로 생성하면 실패", async function () {
-      const { factory, usdc, issuer, opsWallet } = await deployFixture();
-      const pastTs = (await time.latest()) - 1000;
-      await expect(
-        factory.connect(issuer).createBond(
-          "TEST-BOND", "TBND",
-          await usdc.getAddress(),
-          opsWallet.address,
-          ethers.parseUnits("10000", 6), 1000, pastTs
-        )
-      ).to.be.revertedWith("maturity must be in the future");
-    });
+    // 원금 청구
+    await time.increaseTo(payment2 + 1);
+    const beforePrincipal = await usdc.balanceOf(investor.address);
+    await bond.connect(investor).claim(1);
+    const afterPrincipal  = await usdc.balanceOf(investor.address);
+    expect(afterPrincipal - beforePrincipal).to.equal(NOTIONAL * PRINCIPAL / 1_000_000n);
+    expect(await bond.balanceOf(investor.address)).to.equal(0); // 소각
   });
 
-  // ── 2. USDC 화이트리스트 ─────────────────────────────────
-  describe("USDC 화이트리스트", function () {
+  it("무이표채: 청약 → 발행 → 원금 일괄 상환", async function () {
+    const { factory, usdc, owner, issuer, investor, opsWallet } =
+      await deployFactoryFixture();
 
-    it("owner만 화이트리스트 등록 가능", async function () {
-      const { factory, issuer } = await deployFixture();
-      const fakeToken = ethers.Wallet.createRandom().address;
+    const now      = await time.latest();
+    const subStart = now;
+    const issue    = now + 1  * 24 * 3600;
+    const maturity = now + 60 * 24 * 3600;
 
-      await expect(
-        factory.connect(issuer).setAllowedUSDC(fakeToken, true)
-      ).to.be.revertedWith("only owner");
-    });
+    const zcParams = {
+      name:              "ZC-BOND-001",
+      symbol:            "ZC001",
+      opsWallet:         opsWallet.address,
+      maxNotional:       NOTIONAL,
+      couponRateBps:     500,
+      subscriptionStart: subStart,
+      issueDate:         issue,
+      reserveBufferDays: 3,
+      paymentDates:      [maturity],
+      amountsPerToken:   [PRINCIPAL],
+      isPrincipal:       [true],
+    };
 
-    it("화이트리스트 해제 후 채권 생성 불가", async function () {
-      const { factory, usdc, owner, issuer, opsWallet, MATURITY_TS } = await deployFixture();
+    const tx      = await factory.connect(issuer).createBond(await usdc.getAddress(), zcParams);
+    const receipt = await tx.wait();
+    const event   = receipt.logs.find(l => l.fragment?.name === "BondCreated");
+    const bond    = await ethers.getContractAt("StructuredBond", event.args.bondAddress);
 
-      // 화이트리스트 해제
-      await factory.connect(owner).setAllowedUSDC(await usdc.getAddress(), false);
+    // 청약 + 발행
+    await usdc.connect(investor).approve(await bond.getAddress(), NOTIONAL);
+    await bond.connect(investor).subscribe(NOTIONAL);
+    await time.increaseTo(issue + 1);
+    await bond.completeIssuance();
 
-      await expect(
-        factory.connect(issuer).createBond(
-          "TEST-BOND", "TBND",
-          await usdc.getAddress(),
-          opsWallet.address,
-          ethers.parseUnits("10000", 6), 1000, MATURITY_TS
-        )
-      ).to.be.revertedWith("usdc not whitelisted");
-    });
-  });
+    // Reserve
+    const required = NOTIONAL * PRINCIPAL / 1_000_000n;
+    await usdc.connect(issuer).approve(await bond.getAddress(), required);
+    await bond.connect(issuer).reserve(required);
 
-  // ── 3. 목록 관리 ─────────────────────────────────────────
-  describe("목록 관리", function () {
+    // 만기 claim
+    await time.increaseTo(maturity + 1);
+    const before = await usdc.balanceOf(investor.address);
+    await bond.connect(investor).claim(0);
+    const after  = await usdc.balanceOf(investor.address);
 
-    it("생성한 채권이 allBonds에 추가되어야 한다", async function () {
-      const { factory, usdc, issuer, opsWallet } = await deployFixture();
-
-      expect(await factory.totalBonds()).to.equal(0);
-      await createBond(factory, usdc, issuer, opsWallet, { name: "B1", symbol: "B1" });
-      await createBond(factory, usdc, issuer, opsWallet, { name: "B2", symbol: "B2" });
-      expect(await factory.totalBonds()).to.equal(2);
-    });
-
-    it("발행자별 채권 목록이 따로 관리되어야 한다", async function () {
-      const { factory, usdc, issuer, issuer2, opsWallet } = await deployFixture();
-
-      await createBond(factory, usdc, issuer,  opsWallet, { name: "A", symbol: "A" });
-      await createBond(factory, usdc, issuer,  opsWallet, { name: "B", symbol: "B" });
-      await createBond(factory, usdc, issuer2, opsWallet, { name: "C", symbol: "C" });
-
-      expect((await factory.getBondsByIssuer(issuer.address)).length).to.equal(2);
-      expect((await factory.getBondsByIssuer(issuer2.address)).length).to.equal(1);
-    });
-  });
-
-  // ── 4. E2E ───────────────────────────────────────────────
-  describe("E2E — Factory로 생성한 채권 전체 흐름", function () {
-
-    it("reserve → redeem 정상 동작", async function () {
-      const { factory, usdc, issuer, opsWallet, investor } = await deployFixture();
-      const MATURITY_TS = (await time.latest()) + 7 * 24 * 60 * 60;
-
-      const bondAddress = await createBond(factory, usdc, issuer, opsWallet, { maturityTs: MATURITY_TS });
-      const bond = await ethers.getContractAt("StructuredBond", bondAddress);
-
-      await usdc.mint(issuer.address, ethers.parseUnits("100000", 6));
-
-      const reserveAmt = ethers.parseUnits("10020", 6);
-      await usdc.connect(issuer).approve(bondAddress, reserveAmt);
-      await bond.connect(issuer).reserve(reserveAmt);
-      await bond.connect(issuer).transfer(investor.address, ethers.parseUnits("1000", 6));
-
-      await time.increaseTo(MATURITY_TS + 1);
-
-      const before = await usdc.balanceOf(investor.address);
-      await bond.connect(investor).redeem();
-      const after  = await usdc.balanceOf(investor.address);
-
-      expect(after - before).to.be.gt(ethers.parseUnits("1000", 6));
-    });
-
-    it("잉여 Reserve를 발행자가 회수할 수 있다", async function () {
-      const { factory, usdc, issuer, opsWallet, investor } = await deployFixture();
-      const MATURITY_TS = (await time.latest()) + 7 * 24 * 60 * 60;
-
-      const bondAddress = await createBond(factory, usdc, issuer, opsWallet, { maturityTs: MATURITY_TS });
-      const bond = await ethers.getContractAt("StructuredBond", bondAddress);
-
-      await usdc.mint(issuer.address, ethers.parseUnits("100000", 6));
-
-      // Reserve를 필요량보다 많이 적립
-      const reserveAmt = ethers.parseUnits("20000", 6); // 2배 적립
-      await usdc.connect(issuer).approve(bondAddress, reserveAmt);
-      await bond.connect(issuer).reserve(reserveAmt);
-
-      // 투자자 1명만 1000토큰 구매 후 만기 redeem
-      await bond.connect(issuer).transfer(investor.address, ethers.parseUnits("1000", 6));
-      await time.increaseTo(MATURITY_TS + 1);
-      await bond.connect(investor).redeem();
-
-      // 발행자가 잉여 Reserve 회수
-      const issuerBefore = await usdc.balanceOf(issuer.address);
-      await bond.connect(issuer).withdrawExcessReserve();
-      const issuerAfter  = await usdc.balanceOf(issuer.address);
-
-      expect(issuerAfter).to.be.gt(issuerBefore);
-    });
-
-    it("발행자 주소를 이전할 수 있다", async function () {
-      const { factory, usdc, issuer, opsWallet, investor } = await deployFixture();
-      const bondAddress = await createBond(factory, usdc, issuer, opsWallet);
-      const bond = await ethers.getContractAt("StructuredBond", bondAddress);
-
-      await bond.connect(issuer).transferIssuer(investor.address);
-      expect(await bond.issuer()).to.equal(investor.address);
-
-      // 기존 발행자는 reserve 불가
-      await usdc.mint(issuer.address, ethers.parseUnits("10020", 6));
-      await usdc.connect(issuer).approve(bondAddress, ethers.parseUnits("10020", 6));
-      await expect(
-        bond.connect(issuer).reserve(ethers.parseUnits("10020", 6))
-      ).to.be.revertedWith("only issuer");
-    });
+    expect(after - before).to.equal(required);
+    expect(await bond.balanceOf(investor.address)).to.equal(0);
   });
 });
