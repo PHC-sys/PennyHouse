@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useState } from "react";
+import { use, useState, useEffect } from "react";
 import {
   useReadContracts, useWriteContract,
   useWaitForTransactionReceipt, useAccount,
@@ -68,10 +68,14 @@ export default function BondDetailPage({
   const opsWallet        = data?.[12]?.result as string;
 
   const { writeContract, data: txHash, isPending } = useWriteContract();
-  const { isLoading: isConfirming } = useWaitForTransactionReceipt({
+  const { isLoading: isConfirming, isSuccess: txSuccess } = useWaitForTransactionReceipt({
     hash: txHash,
-    onReplaced: () => refetch(),
   });
+
+  // 트랜잭션 완료 시 데이터 자동 갱신 → 버튼 상태 즉시 반영
+  useEffect(() => {
+    if (txSuccess) refetch();
+  }, [txSuccess]);
 
   const isIssuer = userAddress?.toLowerCase() === issuer?.toLowerCase();
   const now = BigInt(Math.floor(Date.now() / 1000));

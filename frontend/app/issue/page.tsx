@@ -65,6 +65,12 @@ export default function IssuePage() {
 
     const couponBps = toBps(rate);
 
+    // 같은 날짜면 발효일에 1초 추가 (컨트랙트: subscriptionStart < issueDate)
+    const subStartTs  = BigInt(toTimestamp(subStart));
+    const issueDateTs = subStart === issueDate
+      ? subStartTs + 1n
+      : BigInt(toTimestamp(issueDate));
+
     // 지급 스케줄 계산
     const paymentDates = payments.map((p) => BigInt(toTimestamp(p.date)));
     const amountsPerToken = payments.map((p, i) => {
@@ -87,8 +93,8 @@ export default function IssuePage() {
           opsWallet: opsWallet as `0x${string}`,
           maxNotional: toUSDC(notional),
           couponRateBps: BigInt(couponBps),
-          subscriptionStart: BigInt(toTimestamp(subStart)),
-          issueDate: BigInt(toTimestamp(issueDate)),
+          subscriptionStart: subStartTs,
+          issueDate: issueDateTs,
           reserveBufferDays: BigInt(bufferDays),
           paymentDates,
           amountsPerToken,
