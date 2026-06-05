@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAccount, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { useRouter } from "next/navigation";
 import { CONTRACTS } from "@/lib/config";
@@ -104,9 +104,9 @@ export default function IssuePage() {
     });
   };
 
-  if (isSuccess) {
-    router.push("/");
-  }
+  useEffect(() => {
+    if (isSuccess) router.push("/");
+  }, [isSuccess]);
 
   return (
     <div className="max-w-2xl mx-auto">
