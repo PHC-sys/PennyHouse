@@ -157,11 +157,15 @@ contract StructuredBond is ERC20, ReentrancyGuard {
         emit SubscriptionCancelled(msg.sender, amount);
     }
 
-    // ── 3. 발행 완료 (발효일 이후, 누구나 호출) ─────────────
+    // ── 3. 발행 완료 (누구나 호출) ──────────────────────────────
+    // 조건: 발효일 경과 OR 완판(totalSubscribed >= maxNotional)
     // USDC 에스크로 → 발행자 지갑으로 릴리즈
     function completeIssuance() external nonReentrant {
-        require(block.timestamp >= issueDate, "issue date not reached");
-        require(!issuanceComplete,            "already complete");
+        require(
+            block.timestamp >= issueDate || totalSubscribed >= maxNotional,
+            "not ready: wait for issue date or full subscription"
+        );
+        require(!issuanceComplete, "already complete");
 
         issuanceComplete = true;
         if (totalSubscribed > 0) {

@@ -255,6 +255,22 @@ describe("StructuredBond — 발행 완료(completeIssuance)", function () {
     expect(await bond.issuanceComplete()).to.equal(true);
   });
 
+  it("완판 시 발효일 전에도 발행 완료 가능", async function () {
+    const { bond, usdc, issuer, investor } = await deployCouponBond();
+
+    // 전액 청약 (완판)
+    await usdc.connect(investor).approve(await bond.getAddress(), NOTIONAL);
+    await bond.connect(investor).subscribe(NOTIONAL);
+
+    // 발효일 전인데도 완료 가능
+    const issuerBefore = await usdc.balanceOf(issuer.address);
+    await bond.completeIssuance();
+    const issuerAfter  = await usdc.balanceOf(issuer.address);
+
+    expect(issuerAfter - issuerBefore).to.equal(NOTIONAL);
+    expect(await bond.issuanceComplete()).to.equal(true);
+  });
+
   it("미달 청약 시 들어온 만큼만 발행 (Notional 축소)", async function () {
     const { bond, usdc, investor, issue } = await deployCouponBond();
     const partial = ethers.parseUnits("3000", 6); // 10,000 중 3,000만

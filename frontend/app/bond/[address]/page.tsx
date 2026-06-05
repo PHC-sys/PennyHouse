@@ -301,10 +301,14 @@ export default function BondDetailPage({
         <section className="bg-gray-900 border border-yellow-800 rounded-xl p-6 space-y-4">
           <h2 className="font-semibold text-yellow-300">발행자 전용</h2>
 
-          {/* 발행 완료 */}
-          {!issuanceComplete && issueDate && now >= issueDate && (
+          {/* 발행 완료: 발효일 경과 OR 완판 시 */}
+          {!issuanceComplete && (now >= (issueDate ?? 0n) || (totalSubscribed ?? 0n) >= (maxNotional ?? 1n)) && (
             <div>
-              <p className="text-sm text-gray-400 mb-2">발효일이 지났습니다. 발행을 완료하면 청약 대금이 내 지갑으로 전송됩니다.</p>
+              <p className="text-sm text-gray-400 mb-2">
+                {(totalSubscribed ?? 0n) >= (maxNotional ?? 1n)
+                  ? "완판됐습니다. 지금 발행 완료할 수 있습니다."
+                  : "발효일이 지났습니다. 발행을 완료하면 청약 대금이 내 지갑으로 전송됩니다."}
+              </p>
               <button
                 onClick={handleCompleteIssuance}
                 disabled={isPending || isConfirming}
