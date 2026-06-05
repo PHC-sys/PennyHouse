@@ -282,9 +282,15 @@ export default function IssuePage() {
           color: white;
           font-size: 0.875rem;
           outline: none;
+          color-scheme: dark;
         }
         .input:focus {
           border-color: #3b82f6;
+        }
+        .input::-webkit-calendar-picker-indicator {
+          filter: invert(1);
+          opacity: 0.7;
+          cursor: pointer;
         }
       `}</style>
     </div>
