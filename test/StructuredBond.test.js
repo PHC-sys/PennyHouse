@@ -19,14 +19,15 @@ describe("StructuredBond", function () {
 
     // StructuredBond 배포
     const Bond = await ethers.getContractFactory("StructuredBond");
-    const bond = await Bond.deploy(
+    const bond = await Bond.connect(issuer).deploy(
       "TEST-BOND",
       "TBND",
+      issuer.address,   // ← _issuer 파라미터 추가
       await usdc.getAddress(),
       opsWallet.address,
       NOTIONAL,
       COUPON_BPS,
-      MATURITY_TS       // ← 날짜(timestamp) 직접 입력
+      MATURITY_TS
     );
 
     // 발행자에게 USDC 지급 (테스트용)
@@ -71,6 +72,7 @@ describe("StructuredBond", function () {
       await expect(
         Bond.deploy(
           "BAD-BOND", "BAD",
+          issuer.address,
           await usdc.getAddress(),
           opsWallet.address,
           ethers.parseUnits("10000", 6),

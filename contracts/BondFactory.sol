@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.28;
 
 import "./StructuredBond.sol";
 
@@ -17,7 +17,7 @@ contract BondFactory {
         string  symbol,
         uint256 notional,
         uint256 couponRateBps,
-        uint256 maturityDays
+        uint256 maturityTimestamp
     );
 
     // ── 채권 발행 (누구나 호출 가능) ────────────────────────
@@ -28,27 +28,25 @@ contract BondFactory {
         address opsWallet,
         uint256 notional,
         uint256 couponRateBps,
-        uint256 maturityDays
+        uint256 maturityTimestamp
     ) external returns (address) {
         require(bytes(name).length > 0,   "name required");
         require(bytes(symbol).length > 0, "symbol required");
         require(usdc != address(0),       "invalid usdc address");
 
+        // msg.sender(실제 발행자)를 _issuer로 넘김
+        // → StructuredBond 내부 issuer = 사용자 지갑
+        // → 토큰도 사용자 지갑으로 바로 발행
         StructuredBond bond = new StructuredBond(
             name,
             symbol,
+            msg.sender,     // ← 실제 발행자
             usdc,
             opsWallet,
             notional,
             couponRateBps,
-            maturityDays
+            maturityTimestamp
         );
-
-        // 발행된 토큰을 호출자(발행자)에게 전달
-        // (StructuredBond가 Factory를 msg.sender로 인식하므로 토큰이 Factory에 발행됨)
-        // → 발행자가 직접 배포하도록 issuer를 tx.origin으로 처리하거나
-        //   Factory에서 토큰을 전달하는 방식 사용
-        IERC20(address(bond)).transfer(msg.sender, IERC20(address(bond)).balanceOf(address(this)));
 
         allBonds.push(address(bond));
         bondsByIssuer[msg.sender].push(address(bond));
@@ -60,7 +58,7 @@ contract BondFactory {
             symbol,
             notional,
             couponRateBps,
-            maturityDays
+            maturityTimestamp
         );
 
         return address(bond);

@@ -35,6 +35,7 @@ contract StructuredBond is ERC20, ReentrancyGuard {
     constructor(
         string  memory _name,
         string  memory _symbol,
+        address _issuer,            // 실제 발행자 주소 (Factory 경유 시 tx 호출자)
         address _usdc,
         address _opsWallet,
         uint256 _notional,          // e.g. 10000000000 (10,000 USDC, 6 decimals)
@@ -42,13 +43,14 @@ contract StructuredBond is ERC20, ReentrancyGuard {
         uint256 _maturityTimestamp  // 만기일 unix timestamp (프론트에서 날짜 → 변환)
     ) ERC20(_name, _symbol) {
         // ── 입력값 검증 ──────────────────────────────────────
+        require(_issuer != address(0),                  "invalid issuer");
         require(_notional > 0,                          "notional must be > 0");
         require(_couponRateBps > 0,                     "rate must be > 0");
         require(_maturityTimestamp > block.timestamp,   "maturity must be in the future");
         require(_opsWallet != address(0),               "invalid opsWallet");
         require(_usdc != address(0),                    "invalid usdc address");
 
-        issuer        = msg.sender;
+        issuer        = _issuer;    // Factory가 넘겨준 실제 발행자
         usdc          = IERC20(_usdc);
         opsWallet     = _opsWallet;
         notional      = _notional;
@@ -63,8 +65,8 @@ contract StructuredBond is ERC20, ReentrancyGuard {
                                     / (360 days * 10000);
         paymentPerToken = 1e6 + interestPerToken;
 
-        // 토큰 전량 발행 → 발행자에게
-        _mint(msg.sender, _notional);
+        // 토큰 전량 발행 → 실제 발행자에게
+        _mint(_issuer, _notional);
 
         emit BondIssued(_notional, maturityDate, paymentPerToken);
     }
