@@ -167,12 +167,12 @@ export default function BondDetailPage({
       {/* 채권 현황 */}
       <section className="bg-gray-900 border border-gray-800 rounded-xl p-6 grid grid-cols-2 gap-4">
         <div>
-          <p className="text-sm text-gray-400">총 발행액</p>
-          <p className="text-xl font-semibold">{notionalNum.toLocaleString()} USDC</p>
+          <p className="text-sm text-gray-400 mb-1">총 발행액</p>
+          <p className="text-2xl font-bold text-white">{notionalNum.toLocaleString()} <span className="text-sm text-gray-400">USDC</span></p>
         </div>
         <div>
-          <p className="text-sm text-gray-400">청약 현황</p>
-          <p className="text-xl font-semibold">{subscribedNum.toLocaleString()} USDC</p>
+          <p className="text-sm text-gray-400 mb-1">청약 현황</p>
+          <p className="text-2xl font-bold text-white">{subscribedNum.toLocaleString()} <span className="text-sm text-gray-400">USDC</span></p>
           <div className="w-full bg-gray-700 rounded-full h-1.5 mt-1">
             <div
               className="bg-blue-500 h-1.5 rounded-full"
@@ -181,12 +181,12 @@ export default function BondDetailPage({
           </div>
         </div>
         <div>
-          <p className="text-sm text-gray-400">Reserve 잔액</p>
-          <p className="text-xl font-semibold">{reserveNum.toLocaleString()} USDC</p>
+          <p className="text-sm text-gray-400 mb-1">Reserve 잔액</p>
+          <p className="text-2xl font-bold text-white">{reserveNum.toLocaleString()} <span className="text-sm text-gray-400">USDC</span></p>
         </div>
         <div>
-          <p className="text-sm text-gray-400">경과이자 (토큰 1개당)</p>
-          <p className="text-xl font-semibold">{accruedNum.toFixed(6)} USDC</p>
+          <p className="text-sm text-gray-400 mb-1">경과이자 (토큰 1개당)</p>
+          <p className="text-2xl font-bold text-blue-400">{accruedNum.toFixed(6)} <span className="text-sm text-gray-400">USDC</span></p>
           <p className="text-xs text-gray-500 mt-0.5">Act/360 기준</p>
         </div>
       </section>
