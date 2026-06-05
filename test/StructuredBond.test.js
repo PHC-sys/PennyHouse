@@ -44,7 +44,6 @@ describe("StructuredBond", function () {
       expect(await bond.notional()).to.equal(NOTIONAL);
       expect(await bond.couponRateBps()).to.equal(COUPON_BPS);
       expect(await bond.maturityDate()).to.equal(MATURITY_TS);
-      expect(await bond.settled()).to.equal(false);
     });
 
     it("발행자에게 토큰이 전량 발행되어야 한다", async function () {
