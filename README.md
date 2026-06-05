@@ -1,8 +1,8 @@
 # PennyHouse
 
 > 누구나 채권 계약 조건을 입력하면 스마트 컨트랙트가 자동 배포되고,  
-> ERC-20 토큰이 발행되며, Vault에서 쿠폰/원금을 정산받을 수 있는  
-> 온체인 채권 발행 플랫폼.
+> 청약(Subscribe) → 발효(Issue) → 쿠폰 지급(Claim) → 원금 상환(Redeem) 전 과정이  
+> 온체인에서 자동 처리되는 채권 발행 플랫폼.
 
 ---
 
@@ -11,11 +11,13 @@
 1. [프로젝트 개요](#1-프로젝트-개요)
 2. [아키텍처](#2-아키텍처)
 3. [컨트랙트 구조](#3-컨트랙트-구조)
-4. [개발 환경 세팅](#4-개발-환경-세팅)
-5. [배포 가이드](#5-배포-가이드)
-6. [로드맵](#6-로드맵)
-7. [개발 일지](#7-개발-일지)
-8. [배포 정보](#8-배포-정보)
+4. [핵심 설계 결정](#4-핵심-설계-결정)
+5. [개발 환경 세팅](#5-개발-환경-세팅)
+6. [테스트](#6-테스트)
+7. [배포 가이드](#7-배포-가이드)
+8. [로드맵](#8-로드맵)
+9. [개발 일지](#9-개발-일지)
+10. [배포 정보](#10-배포-정보)
 
 ---
 
@@ -24,64 +26,56 @@
 ### 핵심 컨셉
 
 ```
-발행자  → 채권 조건 입력 (Notional, Rate, Maturity)
-        → BondFactory가 개별 StructuredBond 컨트랙트 자동 배포
-        → ERC-20 토큰 발행 (토큰 1개 = USDC 1 액면 청구권)
-        → Reserve에 원금 + 이자 사전 적립
+[발행자]
+  채권 조건 입력 (Notional, Rate, 지급 스케줄, 만기일)
+  → BondFactory.createBond() → StructuredBond 컨트랙트 자동 배포
+  → 청약 기간 설정 → 투자자 모집
+  → 발효일에 자금 수령 → 운용
+  → 각 지급일 전 Reserve 적립
 
-투자자  → 토큰 매수 (청구권 취득)
-        → 소수점 단위 분할 거래 가능
-        → 2차 시장 (HL Spot 오더북 / DEX) 자유 거래
-
-만기 시 → 보유 토큰 비례로 USDC 자동 정산
-        → 토큰 burn → USDC 수령
+[투자자]
+  청약 기간 : subscribe() → USDC 납입 → PAR 가격으로 토큰 수령
+  보유 중   : 2차 시장(HL Spot / DEX)에서 자유롭게 매매 (Dirty Price)
+  지급일    : claim(index) → 쿠폰 수령 (토큰 유지)
+  만기일    : claim(finalIndex) → 원금 수령 (토큰 소각)
 ```
 
-### 왜 ERC-20인가
+### 전통 금융과의 차이
 
-국고채처럼 사고팔리려면 분할 거래가 가능해야 합니다.
-
-| 항목 | ERC-721 (NFT) | ERC-20 (채택) |
-|------|--------------|--------------|
-| 분할 거래 | 불가 | 소수점 단위 가능 |
-| 2차 시장 | OpenSea | HL Spot / DEX |
-| 청구권 이전 | NFT 전송 | 토큰 전송 |
-| 자동 정산 | 불가 | 보유량 비례 |
-
-### Reserve 투명성
-
-```
-Reserve 잔액        → 항상 온체인 공개
-Reserve 부족 발생   → 운용 지갑 주소 자동 공개
-KYC/KYB 완료 시    → 지갑-실명 매핑 공개 (제도권 연동 단계)
-```
-
-### SPC 연동 (로드맵)
-
-```
-지금  : 발행자 지갑이 직접 Reserve 적립 (발행자 = SPC 역할 겸임)
-나중  : SPC(법인) 설립 → 실제 자산 운용 수익 → Reserve 적립
-변경점: Reserve를 채우는 주체만 교체, 컨트랙트 로직 그대로
-```
-
-Ondo Finance도 단순 컨트랙트로 시작해서 법적 레이어를 나중에 감쌌습니다.
+| 항목 | 전통 금융 | PennyHouse |
+|------|----------|-----------|
+| 발행 방식 | 증권사 중개 | 스마트 컨트랙트 직접 발행 |
+| Primary Dealer | 필요 | 불필요 (subscribe()로 직접 청약) |
+| 지급 정산 | T+2 결제 | 즉시 온체인 자동 정산 |
+| Reserve 투명성 | 분기 공시 | 실시간 온체인 공개 |
+| 경과이자 확인 | 블룸버그 | 컨트랙트 view 함수 |
+| 운용 지갑 추적 | 불가 | Debank / Etherscan 링크 |
 
 ---
 
 ## 2. 아키텍처
 
 ```
-[웹 UI (Next.js)]
-      ↓  wagmi / viem
-[BondFactory.sol]  ← 채권 발행 공장, 주소 목록 관리
-      ↓  createBond()
-[StructuredBond.sol]  ← 개별 채권 컨트랙트 (ERC-20)
-      ├─ reserve()   : 발행자가 USDC 사전 적립
-      ├─ redeem()    : 만기 후 토큰 burn → USDC 수령
-      ├─ getBondTerms()    : 채권 조건 조회
-      └─ getReserveStatus(): Reserve 현황 + 운용지갑 공개 여부
+[웹 UI (Next.js + wagmi)]
+        ↓
+[BondFactory.sol]
+  USDC 화이트리스트 관리
+  createBond(usdc, BondParams) → StructuredBond 배포
+  allBonds[], bondsByIssuer[] 목록 관리
+        ↓
+[StructuredBond.sol]  (ERC-20 + ReentrancyGuard)
+  ├── subscribe()          청약 기간 USDC 수납 → 에스크로
+  ├── cancelSubscription() 발효일 전 청약 취소 → 환불
+  ├── completeIssuance()   발효일 이후 USDC → 발행자 지갑
+  ├── reserve()            발행자가 지급용 USDC 적립
+  ├── checkReserveForPayment() 체크포인트 도달 시 Reserve 검증
+  ├── claim(index)         지급일 도래 시 쿠폰/원금 수령
+  ├── withdrawExcessReserve()  잉여 Reserve 회수
+  ├── transferIssuer()     발행자 주소 이전 (키 탈취 대응)
+  └── accruedInterestPerToken() 경과이자 조회 (Act/360)
 
 [HL Spot 오더북 / DEX]  ← ERC-20 토큰 2차 시장
+[Debank / Etherscan]    ← 운용 지갑 트래킹 (UI 링크)
 ```
 
 ---
@@ -90,62 +84,102 @@ Ondo Finance도 단순 컨트랙트로 시작해서 법적 레이어를 나중�
 
 ```
 contracts/
-├── AllowanceVault.sol    ← v1: ERC-721 기반, 단일 NFT 채권 (원형)
-├── IERC20.sol            ← USDC 인터페이스
-├── StructuredBond.sol    ← v2: ERC-20 기반, 분할 가능 구조화채권
-└── BondFactory.sol       ← v3: Factory 패턴, 채권 대량 배포
+├── AllowanceVault.sol       ← v1: ERC-721 NFT 채권 (학습용 원형)
+├── IERC20.sol               ← USDC 인터페이스
+├── MockUSDC.sol             ← 테스트 전용 가짜 USDC (실배포 X)
+├── StructuredBond.sol       ← v3: 현재 핵심 채권 컨트랙트
+└── BondFactory.sol          ← 채권 공장 (StructuredBond 대량 배포)
+
+test/
+├── StructuredBond.test.js   ← 45개 테스트 (전체 커버)
+└── BondFactory.test.js      ← Factory + E2E 테스트 포함
 ```
 
-### AllowanceVault.sol (v1 — 원형)
-
-ERC-721 NFT가 채권 그 자체인 구조. 학습 및 개념 검증용.
+### 진화 과정
 
 ```
-발행자 → mintTo() → NFT 발행
-발행자 → deposit() → USDC 수시 적립
-NFT 보유자 → claim() → USDC 전액 수령
-NFT 보유자 → transfer() → 청구권 양도
-```
-
-### StructuredBond.sol (v2 — 현재 개발 중)
-
-ERC-20으로 재설계. 채권 조건 하드코딩, Reserve 강제 관리.
-
-```
-핵심 변수:
-  notional       : 총 원금 (USDC)
-  couponRateBps  : 연 이율 (basis points, 1000 = 10%)
-  maturityDate   : 만기일 (unix timestamp)
-  paymentPerToken: 토큰 1개당 만기 지급액
-
-핵심 함수:
-  reserve()          : 발행자 USDC 적립
-  redeem()           : 만기 후 토큰 burn + USDC 수령
-  getBondTerms()     : 채권 조건 전체 조회
-  getReserveStatus() : Reserve 현황 + 부족 시 운용지갑 공개
-```
-
-이자 계산 (30/360 단순화):
-```
-토큰 1개당 이자 = 1 USDC × couponRate × (만기일수 / 360)
-만기 지급액     = 원금 + 이자 (토큰 보유량 비례)
-```
-
-### BondFactory.sol (v3 — 예정)
-
-```
-createBond(name, symbol, usdc, opsWallet, notional, rateBps, maturityDays)
-  → StructuredBond 새 컨트랙트 자동 배포
-  → allBonds[] 목록에 주소 추가
-  → 발행자별 목록 관리
-
-getAllBonds()          → 전체 채권 목록
-getBondsByIssuer()    → 발행자별 채권 목록
+v1 AllowanceVault  ERC-721 NFT, 단일 청구권, 수시 적립
+        ↓
+v2 StructuredBond  ERC-20, 고정금리, 단일 만기, 일괄 상환
+        ↓
+v3 StructuredBond  ERC-20, 청약/발효/지급 스케줄, 이표채+무이표채,
+(현재)             체크포인트 Reserve, 이중지급 방지(paymentCap)
 ```
 
 ---
 
-## 4. 개발 환경 세팅
+## 4. 핵심 설계 결정
+
+### 채권 유형 — 무이표채가 기본 단위
+
+이표채는 무이표채들의 합으로 표현할 수 있습니다 (Bond Stripping 이론).
+
+```
+paymentSchedule[] 배열 하나로 통합 처리:
+
+무이표채: [{date: 만기일, amount: 원금+할인액, isPrincipal: true}]
+
+이표채:   [{date: 1차지급일, amount: 쿠폰,  isPrincipal: false},
+           {date: 2차지급일, amount: 쿠폰,  isPrincipal: false},
+           {date: 만기일,    amount: 원금+쿠폰, isPrincipal: true}]
+```
+
+### 청약(Subscribe) — Primary Dealer 제거
+
+```
+청약 기간: 투자자 USDC → 컨트랙트 에스크로 (FCFS, Notional 상한)
+발효일:    에스크로 → 발행자 지갑 (실제 자금 조달)
+미달 청약: 들어온 만큼만 발행 (Notional 자동 축소)
+```
+
+발행자는 조달한 자금을 자유롭게 운용하고, Reserve는 각 지급일 전에 별도로 적립합니다.
+
+### Reserve — 체크포인트 방식
+
+연속 적립 대신 지급일 **N일 전**에만 체크합니다.
+
+```
+체크포인트 사이: Reserve 요건 없음 (발행자 부담 최소화)
+체크포인트 도달: Reserve < 다음 지급액 → opsWallet 주소 자동 공개
+지급일 도달:    claim() 호출 시 Reserve에서 자동 지급
+```
+
+### 이중지급 방지 — paymentCap
+
+토큰 전송 후 이전 보유자와 새 보유자가 같은 회차를 중복 청구하는 것을 막습니다.
+
+```
+최초 claim(index) 호출 시:
+  paymentCap[index] = totalSupply × amountPerToken (확정)
+
+이후:
+  cumulativeClaimed[index] + 청구액 ≤ paymentCap[index]
+  조건 위반 시 revert → 이중지급 차단
+```
+
+### 경과이자 (Dirty Price 지원)
+
+```
+Act/360 기준 (달러 표준):
+  accruedInterestPerToken() = 1 USDC × rate × (직전 지급일 이후 경과초) / (360일 초)
+
+→ 프론트엔드에서 읽어서 2차 시장 Dirty Price 표시
+→ 컨트랙트는 강제하지 않음, 시장이 알아서 반영
+```
+
+### 운용 지갑 투명성
+
+```
+Reserve 충분 → opsWallet 비공개
+Reserve 부족 → opsWallet 주소 온체인 공개 (자동, 불가역)
+
+공개된 주소: Debank / Etherscan에서 실시간 자산 추적 가능
+→ 분기 공시보다 더 실시간적인 투명성
+```
+
+---
+
+## 5. 개발 환경 세팅
 
 ### 필수 설치
 
@@ -156,44 +190,72 @@ Git
 MetaMask
 ```
 
-### VS Code 확장
+### VS Code / Cursor 확장
 
 ```
-Solidity — Nomic Foundation
-Prettier — Prettier
+Solidity  — Nomic Foundation  (Solidity 문법 지원)
+Prettier  — Prettier          (코드 자동 정렬)
 ```
 
 ### 프로젝트 세팅
 
 ```bash
-# 의존성 설치
 npm install
 
-# 환경변수 설정
 cp .env.example .env
-# .env 파일에 PRIVATE_KEY 입력 (MetaMask 개인키)
+# .env 에 PRIVATE_KEY 입력 (MetaMask 개인키, 0x 포함)
 ```
 
-### 네트워크 설정 (hardhat.config.js)
+### hardhat.config.js 네트워크
 
 ```javascript
-networks: {
-  sepolia: {
-    url: process.env.SEPOLIA_RPC_URL,
-    accounts: [process.env.PRIVATE_KEY]
-  },
-  hyperEVM: {
-    url: "https://rpc.hyperliquid.xyz/evm",
-    accounts: [process.env.PRIVATE_KEY]
+solidity: {
+  version: "0.8.28",
+  settings: {
+    evmVersion: "cancun",
+    viaIR: true,                          // 파라미터 많아서 필수
+    optimizer: { enabled: true, runs: 200 }
   }
+}
+
+networks: {
+  sepolia:  { url: SEPOLIA_RPC_URL, accounts: [PRIVATE_KEY] },
+  hyperEVM: { url: "https://rpc.hyperliquid.xyz/evm", accounts: [PRIVATE_KEY] }
 }
 ```
 
 ---
 
-## 5. 배포 가이드
+## 6. 테스트
 
-### 테스트 전 준비
+```bash
+npx hardhat test              # 전체 실행 (45개)
+npx hardhat test --grep "청약" # 특정 케이스만
+npx hardhat test test/StructuredBond.test.js  # 파일 지정
+```
+
+### 테스트 커버리지
+
+| 영역 | 케이스 수 |
+|------|---------|
+| 배포 검증 (잘못된 파라미터 차단) | 4 |
+| 청약 (FCFS, 취소, 기간 제한) | 6 |
+| 발행 완료 (에스크로 릴리즈, Notional 축소) | 3 |
+| Reserve (적립, 체크포인트, opsWallet) | 5 |
+| 쿠폰 청구 (토큰 유지, 중복 방지, 소각) | 6 |
+| 이중지급 방지 (paymentCap) | 2 |
+| 무이표채 E2E | 2 |
+| 경과이자 조회 (Act/360, 재기산) | 3 |
+| 잉여 Reserve 회수 | 2 |
+| 발행자 이전 | 1 |
+| BondFactory (생성, 화이트리스트, 목록, E2E) | 11 |
+| **합계** | **45** |
+
+---
+
+## 7. 배포 가이드
+
+### 테스트 준비 (Sepolia)
 
 ```
 Sepolia ETH  : cloud.google.com/application/web3/faucet/ethereum/sepolia
@@ -201,103 +263,117 @@ Sepolia USDC : faucet.circle.com
 USDC 주소    : 0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238
 ```
 
-### 컴파일 & 배포
+### 배포 순서
 
 ```bash
-# 컴파일
+# 1. 컴파일
 npx hardhat compile
 
-# Sepolia 테스트 배포
+# 2. Sepolia 배포
 npx hardhat run scripts/deploy.js --network sepolia
 
-# 메인넷 배포 (검증 후)
+# 3. 검증 후 메인넷
 npx hardhat run scripts/deploy.js --network hyperEVM
 ```
 
-### 채권 발행 순서 (컨트랙트 직접 호출 시)
+### 채권 발행 순서 (웹 UI 기준)
 
 ```
-1. USDC approve  → spender: BondFactory 주소
-2. createBond()  → 파라미터 입력
-3. reserve()     → 원금 + 이자 사전 적립
-4. 투자자에게 토큰 배분 (직접 전송 or 판매)
-5. 만기 후 redeem() → 보유자가 호출 → USDC 수령
+1. BondFactory.createBond() → 채권 컨트랙트 배포
+2. 청약 기간 동안 투자자 모집 (subscribe)
+3. 발효일 이후 completeIssuance() → 자금 수령
+4. 각 지급 체크포인트 전에 reserve() 적립
+5. 지급일 도달 → 투자자가 claim(index) 호출
+6. 모든 지급 완료 후 withdrawExcessReserve()
 ```
 
-### EVM 호환 체인 배포
+### EVM 호환 체인
 
-컨트랙트 코드는 변경 없음. `hardhat.config.js`에 네트워크만 추가하면 됩니다.
+컨트랙트 코드 변경 없이 `hardhat.config.js` 네트워크만 추가하면 됩니다.
 
 ```
-Sepolia  : 테스트
-HyperEVM : 메인 타깃 (HL Spot 오더북 2차 시장 연동)
-Arbitrum : 확장 가능
+Sepolia  → 테스트
+HyperEVM → 메인 타깃 (HL Spot 오더북 2차 시장)
+Arbitrum → 확장 가능
 ```
 
 ---
 
-## 6. 로드맵
+## 8. 로드맵
 
-### Phase 1 — MVP (현재)
+### Phase 1 — 컨트랙트 MVP ✅
 
 ```
-[x] AllowanceVault.sol — ERC-721 채권 원형 (Sepolia 배포 완료)
-[ ] StructuredBond.sol — ERC-20 구조화채권
-[ ] BondFactory.sol    — Factory 패턴
-[ ] Sepolia 통합 테스트
+[x] AllowanceVault.sol  ERC-721 채권 원형
+[x] StructuredBond.sol  청약/발효/지급스케줄/paymentCap
+[x] BondFactory.sol     USDC 화이트리스트, 채권 목록
+[x] 테스트 45개 전부 통과
+[ ] Sepolia 배포 및 실전 테스트
 ```
 
-### Phase 2 — 메인넷
+### Phase 2 — 웹 UI
+
+```
+[ ] Next.js + wagmi + viem 프론트엔드
+[ ] 채권 발행 폼 (정기/커스텀 지급 스케줄)
+[ ] 채권 목록 / 상세 대시보드
+[ ] Reserve 현황 실시간 표시
+[ ] 운용 지갑 Debank / Etherscan 링크
+[ ] 경과이자 (Dirty Price) 표시
+[ ] Vercel 배포
+```
+
+### Phase 3 — 메인넷 & 2차 시장
 
 ```
 [ ] HyperEVM 배포
-[ ] HL Spot 오더북 (HIP-1) 상장 → 2차 시장
-[ ] 웹 UI (Next.js + wagmi)
-[ ] Reserve 대시보드 (실시간 현황)
+[ ] HL Spot 오더북 (HIP-1) 상장
+[ ] 유동성 부트스트래핑
 ```
 
-### Phase 3 — 확장
+### Phase 4 — 변동금리
 
 ```
-[ ] 변동금리 (중앙화 오라클: ECOS API / FRED API → Keeper 봇)
-[ ] 다중 만기 / 쿠폰 지급 스케줄
-[ ] Range Accrual, Inverse Floater 등 구조화 페이오프
+[ ] 중앙화 오라클 (엑셀 or ECOS/FRED API → Python Keeper 봇)
+[ ] couponRateBps 업데이트 함수
+[ ] CD금리 / KOFR / SOFR 연동
 ```
 
-### Phase 4 — 제도권 연동
+### Phase 5 — 제도권 연동
 
 ```
 [ ] SPC(법인) 설립 → Reserve 주체 교체
 [ ] KYC/KYB → 지갑-실명 매핑 공개
-[ ] 실제 자산(국고채, 구조화채권) → SPC → Reserve 적립
-[ ] 컨트랙트 로직 변경 없음
+[ ] 실제 자산 → SPC → Reserve 적립
 ```
 
 ---
 
-## 7. 개발 일지
+## 9. 개발 일지
 
-학습 과정과 설계 결정 기록. `note/` 폴더 참조.
+탐색 과정과 설계 결정 기록. `Note/` 폴더 참조.
 
 | 날짜 | 파일 | 내용 |
 |------|------|------|
-| 2026-05-28 | [note/20260528.md](note/20260528.md) | DeFi 기초 탐색 |
-| 2026-06-01 | [note/20260601.md](note/20260601.md) | HyperVault 설계 구체화 |
-| 2026-06-02 | [note/20260602(PennyHouse_Leveraged_Prediction_Market).md](note/20260602(PennyHouse_Leveraged_Prediction_Market).md) | 예측시장 레버리지 구조 탐색 |
-| 2026-06-04 | [note/20260604.md](note/20260604.md) | 온체인 옵션 분석 → 구조화채권 토크나이제이션으로 수렴 |
+| 2026-05-28 | [Note/20260528.md](Note/20260528.md) | DeFi 기초 탐색 |
+| 2026-06-01 | [Note/20260601.md](Note/20260601.md) | HyperVault 설계 구체화 |
+| 2026-06-02 | [Note/20260602(PennyHouse_Leveraged_Prediction_Market).md](Note/20260602(PennyHouse_Leveraged_Prediction_Market).md) | 예측시장 레버리지 구조 탐색 |
+| 2026-06-04 | [Note/20260604.md](Note/20260604.md) | 온체인 옵션 분석 → 구조화채권으로 수렴 |
+| 2026-06-05 | [docs/StructuredBond_v3_spec.md](docs/StructuredBond_v3_spec.md) | v3 전체 설계 확정 |
 
-관련 설계 문서:
+설계 참고 문서:
 
 | 파일 | 내용 |
 |------|------|
-| [note/HyperVault_Plan.md](note/HyperVault_Plan.md) | HyperVault 실행 계획 |
-| [note/HyperVault_Project_Spec.md](note/HyperVault_Project_Spec.md) | HyperVault 상세 스펙 (델타뉴트럴 캐리) |
-| [docs/AllowanceVault_guide.md](docs/AllowanceVault_guide.md) | AllowanceVault v1 완전 가이드 |
-| [docs/StructuredBond_guide.md](docs/StructuredBond_guide.md) | StructuredBond v2 완전 가이드 |
+| [Note/HyperVault_Plan.md](Note/HyperVault_Plan.md) | HyperVault 실행 계획 |
+| [Note/HyperVault_Project_Spec.md](Note/HyperVault_Project_Spec.md) | 델타뉴트럴 캐리 상세 스펙 |
+| [docs/AllowanceVault_guide.md](docs/AllowanceVault_guide.md) | v1 완전 가이드 |
+| [docs/StructuredBond_v2_guide.md](docs/StructuredBond_v2_guide.md) | v2 설계 가이드 (역사 기록) |
+| [docs/StructuredBond_v3_spec.md](docs/StructuredBond_v3_spec.md) | v3 컨트랙트 스펙 (현재) |
 
 ---
 
-## 8. 배포 정보
+## 10. 배포 정보
 
 ### AllowanceVault (v1 — Sepolia)
 
@@ -308,25 +384,21 @@ USDC (Sepolia) : 0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238
 Issuer         : 0x914624E652DfB66edF49177d11cB7F26828f7392
 ```
 
-### StructuredBond (v2 — Sepolia)
+### BondFactory + StructuredBond (v3 — Sepolia)
 
 ```
-Network          : Ethereum Sepolia (ChainID: 11155111)
-StructuredBond   : [배포 후 기록]
-USDC (Sepolia)   : 0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238
-Issuer           : 0x914624E652DfB66edF49177d11cB7F26828f7392
-Ops Wallet       : [기록]
-Total Notional   : 10,000 USDC (테스트)
-Coupon Rate      : 연 10% (테스트)
-Maturity         : 발행일 + 7일
-Payment/Token    : ≈ 1.001944 USDC
-```
-
-### BondFactory (v3 — 예정)
-
-```
-Network      : Ethereum Sepolia → HyperEVM
+Network      : Ethereum Sepolia (ChainID: 11155111)
 BondFactory  : [배포 후 기록]
+USDC         : 0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238
+Issuer       : 0x914624E652DfB66edF49177d11cB7F26828f7392
+```
+
+### BondFactory + StructuredBond (v3 — HyperEVM)
+
+```
+Network      : HyperEVM (Hyperliquid L1)
+BondFactory  : [배포 후 기록]
+USDC         : [HyperEVM USDC 주소 기록]
 ```
 
 ---
@@ -335,8 +407,9 @@ BondFactory  : [배포 후 기록]
 
 ```
 공개돼도 안전한 것:
-  컨트랙트 주소, Reserve 잔액, Ops Wallet (Reserve 부족 시)
+  컨트랙트 주소, Reserve 잔액
+  opsWallet 주소 (Reserve 부족 시 자동 공개)
 
 절대 공개 금지:
-  MetaMask 니모닉 12단어, Private Key
+  MetaMask 니모닉 12단어, Private Key (.env 파일)
 ```
