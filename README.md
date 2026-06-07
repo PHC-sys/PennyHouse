@@ -308,18 +308,22 @@ Arbitrum → 확장 가능
 [x] StructuredBond.sol  청약/발효/지급스케줄/paymentCap
 [x] BondFactory.sol     USDC 화이트리스트, 채권 목록
 [x] 테스트 45개 전부 통과
-[ ] Sepolia 배포 및 실전 테스트
+[x] Sepolia 배포 및 실전 테스트 완료 (2026-06-05)
 ```
 
-### Phase 2 — 웹 UI
+### Phase 2 — 웹 UI ✅ (Vercel 배포 제외)
 
 ```
-[ ] Next.js + wagmi + viem 프론트엔드
-[ ] 채권 발행 폼 (정기/커스텀 지급 스케줄)
-[ ] 채권 목록 / 상세 대시보드
-[ ] Reserve 현황 실시간 표시
-[ ] 운용 지갑 Debank / Etherscan 링크
-[ ] 경과이자 (Dirty Price) 표시
+[x] Next.js + wagmi + viem 프론트엔드 (localhost:3001)
+[x] 채권 발행 폼 (정기/커스텀 지급 스케줄)
+[x] 채권 목록 / 상세 대시보드
+[x] Reserve 현황 실시간 표시
+[x] 운용 지갑 Debank / Etherscan 링크
+[x] 경과이자 (Dirty Price) 표시
+[x] 청약 / Reserve 적립 / 쿠폰·원금 수령 UI
+[x] 잉여 Reserve 회수 UI
+[ ] cancelSubscription UI (청약 취소)
+[ ] checkReserveForPayment UI (Reserve 체크포인트)
 [ ] Vercel 배포
 ```
 
@@ -360,6 +364,7 @@ Arbitrum → 확장 가능
 | 2026-06-02 | [Note/20260602(PennyHouse_Leveraged_Prediction_Market).md](Note/20260602(PennyHouse_Leveraged_Prediction_Market).md) | 예측시장 레버리지 구조 탐색 |
 | 2026-06-04 | [Note/20260604.md](Note/20260604.md) | 온체인 옵션 분석 → 구조화채권으로 수렴 |
 | 2026-06-05 | [docs/StructuredBond_v3_spec.md](docs/StructuredBond_v3_spec.md) | v3 전체 설계 확정 |
+| 2026-06-05 | [CONTEXT.md](CONTEXT.md) | 프론트엔드 구현 완료, Sepolia 실전 테스트, 다음 작업 정리 |
 
 설계 참고 문서:
 
