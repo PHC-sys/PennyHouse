@@ -319,6 +319,23 @@ export default function BondDetailPage({
             </div>
           )}
 
+          {/* 잉여 Reserve 회수 */}
+          {issuanceComplete && (reserveBalance ?? 0n) > 0n && (
+            <div>
+              <p className="text-sm text-gray-400 mb-2">잉여 Reserve 회수</p>
+              <p className="text-xs text-gray-500 mb-2">
+                다음 미도래 지급에 필요한 금액을 초과하는 Reserve를 회수합니다.
+              </p>
+              <button
+                onClick={() => writeContract({ ...bond, functionName: "withdrawExcessReserve", args: [] })}
+                disabled={isPending || isConfirming}
+                className="bg-gray-600 hover:bg-gray-500 disabled:bg-gray-700 text-white px-4 py-2 rounded-lg text-sm transition"
+              >
+                잉여 Reserve 회수
+              </button>
+            </div>
+          )}
+
           {/* Reserve 적립 */}
           <div>
             <p className="text-sm text-gray-400 mb-2">Reserve 적립</p>
