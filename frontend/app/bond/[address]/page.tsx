@@ -50,6 +50,7 @@ export default function BondDetailPage({
       { ...bond, functionName: "getPaymentSchedule" },
       { ...bond, functionName: "accruedInterestPerToken" },
       { ...bond, functionName: "getOpsWallet" },
+      { ...bond, functionName: "balanceOf", args: [userAddress ?? "0x0000000000000000000000000000000000000000"] },
     ],
   });
 
@@ -66,6 +67,7 @@ export default function BondDetailPage({
   const schedule         = data?.[10]?.result as any[];
   const accruedPerToken  = data?.[11]?.result as bigint;
   const opsWallet        = data?.[12]?.result as string;
+  const myBalance        = data?.[13]?.result as bigint;
 
   const { writeContract, data: txHash, isPending } = useWriteContract();
   const { isLoading: isConfirming, isSuccess: txSuccess } = useWaitForTransactionReceipt({
@@ -161,6 +163,11 @@ export default function BondDetailPage({
           발행자: <span className="font-mono">{issuer ? shortAddr(issuer) : "-"}</span>
           {" · "}발효일: {issueDate ? fromTimestamp(issueDate) : "-"}
           {" · "}연 {couponRateBps ? Number(couponRateBps) / 100 : 0}%
+          {schedule && schedule.length > 0 && issueDate && (() => {
+            const maturity = BigInt(schedule[schedule.length - 1].date);
+            const years = Number(maturity - issueDate) / (365 * 24 * 60 * 60);
+            return <>{" · "}만기 {years.toFixed(2)}년</>;
+          })()}
         </p>
       </div>
 
@@ -216,6 +223,95 @@ export default function BondDetailPage({
           </div>
         </section>
       )}
+
+      {/* 캐시플로우 차트 */}
+      {schedule && schedule.length > 0 && (() => {
+        const amounts = schedule.map((p: any) => Number(p.amountPerToken) / 1_000_000);
+        const maxAmt = Math.max(...amounts);
+        const chartH = 140;
+        const yTicks = [0, maxAmt * 0.5, maxAmt];
+        return (
+          <section className="bg-gray-900 border border-gray-800 rounded-xl p-6">
+            <h2 className="font-semibold mb-4">캐시플로우</h2>
+            <div className="flex gap-2">
+              {/* y축 */}
+              <div className="flex flex-col justify-between items-end pb-8" style={{ height: `${chartH + 8}px` }}>
+                {yTicks.slice().reverse().map((t, i) => (
+                  <span key={i} className="text-xs text-gray-600 tabular-nums">{t.toFixed(2)}</span>
+                ))}
+              </div>
+              {/* 차트 영역 */}
+              <div className="flex-1">
+                {/* 그리드 + 바 */}
+                <div className="relative" style={{ height: `${chartH}px` }}>
+                  {/* 수평 그리드 라인 */}
+                  {[0, 0.5, 1].map((ratio, i) => (
+                    <div
+                      key={i}
+                      className="absolute w-full border-t border-gray-800"
+                      style={{ bottom: `${ratio * 100}%` }}
+                    />
+                  ))}
+                  {/* 바들 */}
+                  <div className="absolute inset-0 flex items-end justify-around px-4">
+                    {schedule.map((p: any, i: number) => {
+                      const amt = Number(p.amountPerToken) / 1_000_000;
+                      const barH = Math.max((amt / maxAmt) * chartH, 3);
+                      const principalAmt = 1.0;
+                      const couponAmt = amt - principalAmt;
+                      const principalH = (principalAmt / maxAmt) * chartH;
+                      const couponH = Math.max((couponAmt / maxAmt) * chartH, 2);
+                      return (
+                        <div key={i} className="flex flex-col items-center gap-1" style={{ width: "40px" }}>
+                          <span className="text-xs text-gray-400 tabular-nums">{amt.toFixed(4)}</span>
+                          {p.isPrincipal ? (
+                            <div style={{ width: "28px", height: `${barH}px` }} className="flex flex-col justify-end">
+                              <div style={{ height: `${couponH}px` }} className="bg-blue-500 rounded-t" />
+                              <div style={{ height: `${principalH}px` }} className="bg-orange-500" />
+                            </div>
+                          ) : (
+                            <div
+                              style={{ height: `${barH}px`, width: "28px" }}
+                              className="bg-blue-500 rounded-t"
+                            />
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+                {/* x축 라벨 */}
+                <div className="flex justify-around px-4 mt-2">
+                  {schedule.map((p: any, i: number) => (
+                    <div key={i} className="flex flex-col items-center" style={{ width: "40px" }}>
+                      <span className="text-xs text-gray-500">{fromTimestamp(BigInt(p.date)).replace("2026. ", "")}</span>
+                      <span className={`text-xs ${p.isPrincipal ? "text-orange-400" : "text-blue-400"}`}>
+                        {p.isPrincipal ? "원금" : "쿠폰"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* 투자자 예상 수령액 */}
+            {myBalance != null && myBalance > 0n && schedule && (() => {
+              const tokenAmt = Number(myBalance) / 1_000_000;
+              const total = schedule.reduce((sum: number, p: any) => {
+                return sum + (Number(p.amountPerToken) / 1_000_000) * tokenAmt;
+              }, 0);
+              return (
+                <div className="mt-4 pt-4 border-t border-gray-800 flex items-center justify-between">
+                  <span className="text-sm text-gray-400">
+                    내 보유 <span className="text-white font-mono">{tokenAmt.toFixed(0)} {symbol}</span> 기준 만기까지 총 예상 수령액
+                  </span>
+                  <span className="text-lg font-bold text-green-400">{total.toFixed(6)} USDC</span>
+                </div>
+              );
+            })()}
+          </section>
+        );
+      })()}
 
       {/* 지급 스케줄 */}
       {schedule && schedule.length > 0 && (
