@@ -133,9 +133,11 @@ npm run dev   # localhost:3001
 
 ## 2026-06-08 추가 설계
 - 펀딩비 기반 고정금리 채권 (FundingCarryBond) 설계 확정
-- 상세 스펙: `docs/FundingCarryBond_spec.md`
+- 상세 스펙: `docs/specs/FundingCarryBond_spec.md`
 - 거버넌스 펀드 방향성 확정 (Phase 4)
-- 다음 최우선 작업: HyperEVM precompile 조사 → FundingCarryStrategy 구현
+- HyperEVM precompile 조사 완료: `docs/research/HyperEVM_precompile.md` 참조
+- 결론: 온체인 캐리 가능. CoreWriter 비동기 → 2-Phase Commit 패턴 필수
+- 다음 최우선 작업: FundingCarryStrategy 컨트랙트 구현 (hyper-evm-lib 기반)
 - 전체 비전 및 장기 로드맵: `docs/Vision_Roadmap.md` 참조
 
 ### 2026-06-08 추가 확정 내용
@@ -192,12 +194,7 @@ subscribe()로 직접 청약, FCFS 방식
 
 ## 8. 다음에 해야 할 작업 (우선순위 순)
 
-### 🔴 최우선: HyperEVM precompile 조사
-- HL Spot / Perp 오더북을 컨트랙트에서 직접 호출 가능한지 확인
-- 펀딩비를 온체인에서 조회 가능한지 확인
-- 참고: https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/evm
-
-### 🔴 그 다음: FundingCarryBond 구현
+### 🔴 최우선: FundingCarryBond 구현
 - 설계 스펙: `docs/FundingCarryBond_spec.md`
 - FundingCarryStrategy 컨트랙트 (현물+숏, 펀딩비 수취, 청산 트리거)
 - StructuredBond에 strategyContract 옵션 추가

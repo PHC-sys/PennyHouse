@@ -352,7 +352,8 @@ Arbitrum → 확장 가능
 [ ] 프론트엔드: YTM, 펀딩비 현황, 청산 트리거 표시
 ```
 
-> 설계 상세: [docs/FundingCarryBond_spec.md](docs/FundingCarryBond_spec.md)
+> 설계 상세: [docs/specs/FundingCarryBond_spec.md](docs/specs/FundingCarryBond_spec.md)  
+> 기술 조사: [docs/research/HyperEVM_precompile.md](docs/research/HyperEVM_precompile.md)
 
 ### Phase 4 — 거버넌스 펀드
 
@@ -385,8 +386,9 @@ Arbitrum → 확장 가능
 | 2026-06-04 | [Note/20260604.md](Note/20260604.md) | 온체인 옵션 분석 → 구조화채권으로 수렴 |
 | 2026-06-05 | [docs/StructuredBond_v3_spec.md](docs/StructuredBond_v3_spec.md) | v3 전체 설계 확정 |
 | 2026-06-05 | [CONTEXT.md](CONTEXT.md) | 프론트엔드 구현 완료, Sepolia 실전 테스트, 다음 작업 정리 |
-| 2026-06-08 | [docs/FundingCarryBond_spec.md](docs/FundingCarryBond_spec.md) | 펀딩비 기반 고정금리 채권 설계 확정 (델타뉴트럴, minReserve, 청산 트리거) |
+| 2026-06-08 | [docs/specs/FundingCarryBond_spec.md](docs/specs/FundingCarryBond_spec.md) | 펀딩비 기반 고정금리 채권 설계 확정 (델타뉴트럴, minReserve, 청산 트리거) |
 | 2026-06-08 | [docs/Vision_Roadmap.md](docs/Vision_Roadmap.md) | 장기 비전 및 전체 로드맵 (FundingCarryBond → GovernanceFund → 구조화상품) |
+| 2026-06-08 | [docs/research/HyperEVM_precompile.md](docs/research/HyperEVM_precompile.md) | HyperEVM precompile 기술 조사 (온체인 캐리 가능성 확인) |
 | 2026-06-08 | contracts/StructuredBond.sol | claimAll() 추가, 테스트 55개 전부 통과 |
 
 설계 참고 문서:
@@ -395,9 +397,11 @@ Arbitrum → 확장 가능
 |------|------|
 | [Note/HyperVault_Plan.md](Note/HyperVault_Plan.md) | HyperVault 실행 계획 |
 | [Note/HyperVault_Project_Spec.md](Note/HyperVault_Project_Spec.md) | 델타뉴트럴 캐리 상세 스펙 |
-| [docs/AllowanceVault_guide.md](docs/AllowanceVault_guide.md) | v1 완전 가이드 |
-| [docs/StructuredBond_v2_guide.md](docs/StructuredBond_v2_guide.md) | v2 설계 가이드 (역사 기록) |
-| [docs/StructuredBond_v3_spec.md](docs/StructuredBond_v3_spec.md) | v3 컨트랙트 스펙 (현재) |
+| [docs/specs/StructuredBond_v3_spec.md](docs/specs/StructuredBond_v3_spec.md) | v3 컨트랙트 스펙 (현재) |
+| [docs/specs/FundingCarryBond_spec.md](docs/specs/FundingCarryBond_spec.md) | FundingCarryBond 설계 스펙 |
+| [docs/research/HyperEVM_precompile.md](docs/research/HyperEVM_precompile.md) | HyperEVM precompile 기술 조사 |
+| [docs/archive/AllowanceVault_guide.md](docs/archive/AllowanceVault_guide.md) | v1 완전 가이드 (구버전) |
+| [docs/archive/StructuredBond_v2_guide.md](docs/archive/StructuredBond_v2_guide.md) | v2 설계 가이드 (구버전) |
 
 ---
 
