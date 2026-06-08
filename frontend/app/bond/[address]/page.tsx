@@ -69,6 +69,25 @@ export default function BondDetailPage({
   const opsWallet        = data?.[12]?.result as string;
   const myBalance        = data?.[13]?.result as bigint;
 
+  // 각 지급 회차별 수령 여부 조회 (schedule 로드 후 동적 생성)
+  const { data: claimedData, refetch: refetchClaimed } = useReadContracts({
+    contracts: (schedule
+      ? schedule.map((_: any, i: number) => ({
+          address: bondAddress as `0x${string}`,
+          abi: StructuredBondABI as any,
+          functionName: "claimed",
+          args: [
+            userAddress ?? "0x0000000000000000000000000000000000000000",
+            BigInt(i),
+          ],
+        }))
+      : []) as any,
+  });
+  // claimedData[i].result === true 이면 해당 회차 이미 수령
+  const claimedStatus: boolean[] = (claimedData ?? []).map(
+    (d: any) => d?.result === true
+  );
+
   const { writeContract, data: txHash, isPending } = useWriteContract();
   const { isLoading: isConfirming, isSuccess: txSuccess } = useWaitForTransactionReceipt({
     hash: txHash,
@@ -76,7 +95,10 @@ export default function BondDetailPage({
 
   // 트랜잭션 완료 시 데이터 자동 갱신 → 버튼 상태 즉시 반영
   useEffect(() => {
-    if (txSuccess) refetch();
+    if (txSuccess) {
+      refetch();
+      refetchClaimed();
+    }
   }, [txSuccess]);
 
   const isIssuer = userAddress?.toLowerCase() === issuer?.toLowerCase();
@@ -314,50 +336,75 @@ export default function BondDetailPage({
       })()}
 
       {/* 지급 스케줄 */}
-      {schedule && schedule.length > 0 && (
-        <section className="bg-gray-900 border border-gray-800 rounded-xl p-6">
-          <h2 className="font-semibold mb-4">지급 스케줄</h2>
-          <div className="space-y-3">
-            {schedule.map((p: any, i: number) => {
-              const payDate = BigInt(p.date);
-              const isDue = now >= payDate;
-              const amount = Number(p.amountPerToken) / 1_000_000;
+      {schedule && schedule.length > 0 && (() => {
+        // 내가 수령 가능한 미수령 회차 수 (토큰 보유자에게만 의미 있음)
+        const claimableCount = myBalance && myBalance > 0n
+          ? schedule.filter((p: any, i: number) => {
+              return now >= BigInt(p.date) && !claimedStatus[i];
+            }).length
+          : 0;
 
-              return (
-                <div key={i} className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
-                  <div>
-                    <span className={`text-xs px-2 py-0.5 rounded mr-2 ${
-                      p.isPrincipal
-                        ? "bg-orange-900 text-orange-300"
-                        : "bg-blue-900 text-blue-300"
-                    }`}>
-                      {p.isPrincipal ? "원금+쿠폰" : "쿠폰"}
-                    </span>
-                    <span className="text-sm">{fromTimestamp(payDate)}</span>
+        return (
+          <section className="bg-gray-900 border border-gray-800 rounded-xl p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-semibold">지급 스케줄</h2>
+              {/* 일괄 수령 버튼: 미수령 도래 회차가 2개 이상일 때만 표시 */}
+              {claimableCount >= 2 && (
+                <button
+                  onClick={() => writeContract({ ...bond, functionName: "claimAll", args: [] })}
+                  disabled={isPending || isConfirming}
+                  className="text-xs bg-green-700 hover:bg-green-600 disabled:bg-gray-700 text-white px-3 py-1.5 rounded transition"
+                >
+                  일괄 수령 ({claimableCount}건)
+                </button>
+              )}
+            </div>
+            <div className="space-y-3">
+              {schedule.map((p: any, i: number) => {
+                const payDate = BigInt(p.date);
+                const isDue = now >= payDate;
+                const isClaimed = claimedStatus[i] ?? false;
+                const amount = Number(p.amountPerToken) / 1_000_000;
+
+                return (
+                  <div key={i} className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
+                    <div>
+                      <span className={`text-xs px-2 py-0.5 rounded mr-2 ${
+                        p.isPrincipal
+                          ? "bg-orange-900 text-orange-300"
+                          : "bg-blue-900 text-blue-300"
+                      }`}>
+                        {p.isPrincipal ? "원금+쿠폰" : "쿠폰"}
+                      </span>
+                      <span className="text-sm">{fromTimestamp(payDate)}</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm text-gray-300">
+                        {amount.toFixed(6)} USDC/토큰
+                      </span>
+                      {issuanceComplete && isDue && isClaimed && (
+                        <span className="text-xs text-gray-500 px-3 py-1">✓ 수령 완료</span>
+                      )}
+                      {issuanceComplete && isDue && !isClaimed && (
+                        <button
+                          onClick={() => handleClaim(i)}
+                          disabled={isPending || isConfirming}
+                          className="text-xs bg-green-700 hover:bg-green-600 disabled:bg-gray-700 text-white px-3 py-1 rounded transition"
+                        >
+                          수령
+                        </button>
+                      )}
+                      {!isDue && (
+                        <span className="text-xs text-gray-500">미도래</span>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-sm text-gray-300">
-                      {amount.toFixed(6)} USDC/토큰
-                    </span>
-                    {issuanceComplete && isDue && (
-                      <button
-                        onClick={() => handleClaim(i)}
-                        disabled={isPending || isConfirming}
-                        className="text-xs bg-green-700 hover:bg-green-600 disabled:bg-gray-700 text-white px-3 py-1 rounded transition"
-                      >
-                        수령
-                      </button>
-                    )}
-                    {!isDue && (
-                      <span className="text-xs text-gray-500">미도래</span>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </section>
-      )}
+                );
+              })}
+            </div>
+          </section>
+        );
+      })()}
 
       {/* 청약 (발행 전) */}
       {!issuanceComplete && (

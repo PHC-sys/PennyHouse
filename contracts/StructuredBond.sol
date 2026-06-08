@@ -241,7 +241,43 @@ contract StructuredBond is ERC20, ReentrancyGuard {
         emit PaymentClaimed(msg.sender, paymentIndex, payment);
     }
 
-    // ── 7. 잉여 Reserve 회수 (발행자만) ─────────────────────
+    // ── 7. 일괄 지급 청구 (도래한 모든 회차) ────────────────
+    // 미수령 쿠폰 + 원금을 한 번의 트랜잭션으로 수령 (가스비 절약)
+    function claimAll() external nonReentrant {
+        require(issuanceComplete, "issuance not complete");
+        uint256 tokenBalance = balanceOf(msg.sender);
+        require(tokenBalance > 0, "no tokens");
+
+        for (uint256 i = 0; i < paymentSchedule.length; i++) {
+            Payment memory p = paymentSchedule[i];
+            if (block.timestamp < p.date) break;   // 아직 미도래 → 이후도 불필요
+            if (claimed[msg.sender][i]) continue;  // 이미 수령 → 건너뜀
+
+            if (paymentCap[i] == 0) {
+                paymentCap[i] = totalSupply() * p.amountPerToken / 1e6;
+            }
+
+            uint256 payment = tokenBalance * p.amountPerToken / 1e6;
+            require(cumulativeClaimed[i] + payment <= paymentCap[i], "payment cap exceeded");
+            require(reserveBalance >= payment, "insufficient reserve");
+
+            // Effects
+            claimed[msg.sender][i]  = true;
+            cumulativeClaimed[i]   += payment;
+            reserveBalance         -= payment;
+
+            // Interactions
+            usdc.safeTransfer(msg.sender, payment);
+            emit PaymentClaimed(msg.sender, i, payment);
+
+            if (p.isPrincipal) {
+                _burn(msg.sender, tokenBalance);
+                break; // 토큰 소각 후 더 이상 진행 불가
+            }
+        }
+    }
+
+    // ── 9. 잉여 Reserve 회수 (발행자만) ─────────────────────
     function withdrawExcessReserve() external nonReentrant {
         require(msg.sender == issuer, "only issuer");
 
@@ -263,7 +299,7 @@ contract StructuredBond is ERC20, ReentrancyGuard {
         emit ReserveWithdrawn(excess);
     }
 
-    // ── 8. 발행자 주소 이전 ─────────────────────────────────
+    // ── 10. 발행자 주소 이전 ────────────────────────────────
     function transferIssuer(address newIssuer) external {
         require(msg.sender == issuer,    "only issuer");
         require(newIssuer != address(0), "invalid address");
