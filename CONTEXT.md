@@ -134,6 +134,7 @@ npm run dev   # localhost:3001
 - 상세 스펙: `docs/FundingCarryBond_spec.md`
 - 거버넌스 펀드 방향성 확정 (Phase 4)
 - 다음 최우선 작업: HyperEVM precompile 조사 → FundingCarryStrategy 구현
+- 전체 비전 및 장기 로드맵: `docs/Vision_Roadmap.md` 참조
 
 ### 2026-06-08 추가 확정 내용
 - minReserve = 연 이표 × 1.2 (컨트랙트 강제)
