@@ -327,20 +327,29 @@ Arbitrum → 확장 가능
 [ ] Vercel 배포
 ```
 
-### Phase 3 — 메인넷 & 2차 시장
+### Phase 3 — HyperEVM 배포 & FundingCarryBond
 
 ```
-[ ] HyperEVM 배포
-[ ] HL Spot 오더북 (HIP-1) 상장
-[ ] 유동성 부트스트래핑
+[ ] HyperEVM 배포 (BondFactory + StructuredBond)
+[ ] HyperEVM precompile 조사 (HL Spot/Perp 접근, 펀딩비 온체인 조회)
+[ ] FundingCarryStrategy 컨트랙트 구현
+      - 현물 매수 + 무기한 선물 숏 (델타뉴트럴)
+      - 펀딩비 수취 → Reserve 자동 충전
+      - 청산 트리거 + liquidate()
+[ ] StructuredBond에 strategyContract 옵션 추가
+[ ] HL Spot 오더북 (HIP-1) 채권 토큰 상장
+[ ] 프론트엔드: YTM, 펀딩비 현황, 청산 트리거 표시
 ```
 
-### Phase 4 — 변동금리
+> 설계 상세: [docs/FundingCarryBond_spec.md](docs/FundingCarryBond_spec.md)
+
+### Phase 4 — 거버넌스 펀드
 
 ```
-[ ] 중앙화 오라클 (엑셀 or ECOS/FRED API → Python Keeper 봇)
-[ ] couponRateBps 업데이트 함수
-[ ] CD금리 / KOFR / SOFR 연동
+[ ] 투표 기반 포트폴리오 운용 (지분 가중 투표)
+[ ] 리밸런싱 컨트랙트 (누구나 rebalance() 호출 + 소액 인센티브)
+[ ] BTC/ETH/USDC 비중 투표 → HL에서 자동 스왑
+[ ] 레버리지 / Cross Asset 캐리 전략 확장
 ```
 
 ### Phase 5 — 제도권 연동

@@ -129,6 +129,12 @@ npm run dev   # localhost:3001
 - ✅ 투자자 예상 수령액 표시 (토큰 보유자에게만)
 - ✅ 만기 기간 표시 (소수점 연 단위)
 
+## 2026-06-08 추가 설계
+- 펀딩비 기반 고정금리 채권 (FundingCarryBond) 설계 확정
+- 상세 스펙: `docs/FundingCarryBond_spec.md`
+- 거버넌스 펀드 방향성 확정 (Phase 4)
+- 다음 최우선 작업: HyperEVM precompile 조사 → FundingCarryStrategy 구현
+
 ### 미구현 기능 (다음 작업 후보)
 - ❌ `cancelSubscription()` 버튼 (청약 취소, 발효일 전)
 - ❌ `checkReserveForPayment()` 버튼 (Reserve 체크포인트)
@@ -175,21 +181,33 @@ subscribe()로 직접 청약, FCFS 방식
 
 ## 8. 다음에 해야 할 작업 (우선순위 순)
 
-### 🔴 최우선: HyperEVM 배포
+### 🔴 최우선: HyperEVM precompile 조사
+- HL Spot / Perp 오더북을 컨트랙트에서 직접 호출 가능한지 확인
+- 펀딩비를 온체인에서 조회 가능한지 확인
+- 참고: https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/evm
+
+### 🔴 그 다음: FundingCarryBond 구현
+- 설계 스펙: `docs/FundingCarryBond_spec.md`
+- FundingCarryStrategy 컨트랙트 (현물+숏, 펀딩비 수취, 청산 트리거)
+- StructuredBond에 strategyContract 옵션 추가
+
+### 🟡 병행: HyperEVM 배포
 ```
 1. hardhat.config.js 확인 (hyperEVM 네트워크 이미 설정됨)
 2. HyperEVM USDC 주소 확인
 3. npx hardhat run scripts/deploy.js --network hyperEVM
 4. frontend/lib/config.ts에 HyperEVM 네트워크 추가
-5. 네트워크 전환 지원 (Sepolia ↔ HyperEVM)
 ```
 
-### 🟡 그 다음: 프론트엔드 미구현 기능
+### 🟡 프론트엔드 미구현 기능
 - `cancelSubscription()` 버튼
 - `checkReserveForPayment()` 버튼
-- `withdrawExcessReserve()` 버튼
 
-### 🟢 이후: Vercel 배포
+### 🟢 이후: 거버넌스 펀드 (Phase 4)
+- 투표 기반 포트폴리오 운용
+- FundingCarryBond 전략의 자연스러운 확장
+
+### 🟢 Vercel 배포
 - Phase 2 완료
 
 ---
