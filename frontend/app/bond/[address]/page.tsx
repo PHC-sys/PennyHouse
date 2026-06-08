@@ -385,7 +385,7 @@ export default function BondDetailPage({
                       {issuanceComplete && isDue && isClaimed && (
                         <span className="text-xs text-gray-500 px-3 py-1">✓ 수령 완료</span>
                       )}
-                      {issuanceComplete && isDue && !isClaimed && (
+                      {issuanceComplete && isDue && !isClaimed && myBalance != null && myBalance > 0n && (
                         <button
                           onClick={() => handleClaim(i)}
                           disabled={isPending || isConfirming}
