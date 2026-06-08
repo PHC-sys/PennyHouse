@@ -632,6 +632,232 @@ describe("StructuredBond — 잉여 Reserve 회수", function () {
 });
 
 // ─────────────────────────────────────────────────────────────
+describe("StructuredBond — claimAll()", function () {
+
+  // 공통 셋업: 3회차 채권 (쿠폰 × 2 + 원금+쿠폰)
+  async function setupForClaimAll() {
+    const [owner, issuer, investor, investor2, opsWallet, other] =
+      await ethers.getSigners();
+
+    const now      = await time.latest();
+    const subStart = now;
+    const issue    = now + 1  * 24 * 3600;
+    const pay1     = now + 10 * 24 * 3600;  // 쿠폰
+    const pay2     = now + 20 * 24 * 3600;  // 쿠폰
+    const pay3     = now + 30 * 24 * 3600;  // 원금+쿠폰
+
+    const MockUSDC = await ethers.getContractFactory("MockUSDC");
+    const usdc = await MockUSDC.deploy();
+    await usdc.mint(issuer.address,    ethers.parseUnits("1000000", 6));
+    await usdc.mint(investor.address,  ethers.parseUnits("100000",  6));
+    await usdc.mint(investor2.address, ethers.parseUnits("100000",  6));
+
+    const Bond = await ethers.getContractFactory("StructuredBond");
+    const bond = await Bond.deploy(
+      "CLAIM-ALL-TEST", "CAT",
+      issuer.address,
+      await usdc.getAddress(),
+      opsWallet.address,
+      NOTIONAL,
+      1000,       // 연 10%
+      subStart,
+      issue,
+      3,
+      [pay1, pay2, pay3],
+      [COUPON, COUPON, PRINCIPAL],
+      [false, false, true]
+    );
+
+    // 전액 청약 + 발행 완료
+    await usdc.connect(investor).approve(await bond.getAddress(), NOTIONAL);
+    await bond.connect(investor).subscribe(NOTIONAL);
+    await time.increaseTo(issue + 1);
+    await bond.completeIssuance();
+
+    // Reserve 충분히 적립 (쿠폰×2 + 원금+쿠폰)
+    const totalReserve = NOTIONAL * (COUPON + COUPON + PRINCIPAL) / 1_000_000n;
+    await usdc.connect(issuer).approve(await bond.getAddress(), totalReserve);
+    await bond.connect(issuer).reserve(totalReserve);
+
+    return { bond, usdc, issuer, investor, investor2, other, pay1, pay2, pay3 };
+  }
+
+  // ── 기본 동작 ────────────────────────────────────────────────
+
+  it("미수령 쿠폰 2개를 한 번의 claimAll로 수령", async function () {
+    const { bond, usdc, investor, pay1, pay2, pay3 } = await setupForClaimAll();
+
+    // pay1, pay2 도래 (pay3 미도래)
+    await time.increaseTo(pay2 + 1);
+
+    const usdcBefore = await usdc.balanceOf(investor.address);
+    await bond.connect(investor).claimAll();
+    const usdcAfter = await usdc.balanceOf(investor.address);
+
+    const expected = NOTIONAL * (COUPON + COUPON) / 1_000_000n;
+    expect(usdcAfter - usdcBefore).to.equal(expected);
+
+    // 두 회차 모두 claimed 처리
+    expect(await bond.claimed(investor.address, 0)).to.equal(true);
+    expect(await bond.claimed(investor.address, 1)).to.equal(true);
+    // 미도래 회차는 미수령 상태
+    expect(await bond.claimed(investor.address, 2)).to.equal(false);
+
+    // 쿠폰이라 토큰은 소각 안됨
+    expect(await bond.balanceOf(investor.address)).to.equal(NOTIONAL);
+  });
+
+  it("일부 이미 수령한 상태에서 claimAll → 미수령 것만 수령", async function () {
+    const { bond, usdc, investor, pay1, pay2 } = await setupForClaimAll();
+
+    await time.increaseTo(pay1 + 1);
+    // 첫 번째 쿠폰 개별 수령
+    await bond.connect(investor).claim(0);
+
+    await time.increaseTo(pay2 + 1);
+    const usdcBefore = await usdc.balanceOf(investor.address);
+    await bond.connect(investor).claimAll();
+    const usdcAfter = await usdc.balanceOf(investor.address);
+
+    // 두 번째 쿠폰만 수령 (첫 번째는 이미 claimed)
+    const expected = NOTIONAL * COUPON / 1_000_000n;
+    expect(usdcAfter - usdcBefore).to.equal(expected);
+    expect(await bond.claimed(investor.address, 1)).to.equal(true);
+  });
+
+  it("원금 포함 회차 도달 시 claimAll → 토큰 소각 후 종료", async function () {
+    const { bond, usdc, investor, pay3 } = await setupForClaimAll();
+
+    // 모든 회차 도래
+    await time.increaseTo(pay3 + 1);
+
+    const usdcBefore = await usdc.balanceOf(investor.address);
+    await bond.connect(investor).claimAll();
+    const usdcAfter = await usdc.balanceOf(investor.address);
+
+    // 쿠폰×2 + 원금+쿠폰 전부 수령
+    const expected = NOTIONAL * (COUPON + COUPON + PRINCIPAL) / 1_000_000n;
+    expect(usdcAfter - usdcBefore).to.equal(expected);
+
+    // 원금 지급 후 토큰 소각
+    expect(await bond.balanceOf(investor.address)).to.equal(0);
+    expect(await bond.claimed(investor.address, 0)).to.equal(true);
+    expect(await bond.claimed(investor.address, 1)).to.equal(true);
+    expect(await bond.claimed(investor.address, 2)).to.equal(true);
+  });
+
+  it("도래한 회차 없을 때 claimAll → 아무것도 안함 (revert 없음)", async function () {
+    const { bond, investor } = await setupForClaimAll();
+    // 발행 직후, pay1 미도래
+    // 토큰은 있으므로 require(tokenBalance > 0) 통과, 루프 첫 번째서 break
+    await expect(bond.connect(investor).claimAll()).to.not.be.reverted;
+    expect(await bond.claimed(investor.address, 0)).to.equal(false);
+  });
+
+  // ── 예외 처리 ────────────────────────────────────────────────
+
+  it("발행 미완료 상태에서 claimAll → revert", async function () {
+    const f = await deployCouponBond();
+    await expect(
+      f.bond.connect(f.investor).claimAll()
+    ).to.be.revertedWith("issuance not complete");
+  });
+
+  it("토큰 없는 계정이 claimAll → revert", async function () {
+    const { bond, other, pay1 } = await setupForClaimAll();
+    await time.increaseTo(pay1 + 1);
+    await expect(
+      bond.connect(other).claimAll()
+    ).to.be.revertedWith("no tokens");
+  });
+
+  // ── 보안: claimAll 후 재수령 시도 ───────────────────────────
+
+  it("[보안] claimAll 후 같은 회차 claim 재시도 → revert", async function () {
+    const { bond, investor, pay1 } = await setupForClaimAll();
+    await time.increaseTo(pay1 + 1);
+
+    await bond.connect(investor).claimAll();
+
+    // 같은 회차를 개별 claim으로 재시도
+    await expect(
+      bond.connect(investor).claim(0)
+    ).to.be.revertedWith("already claimed");
+  });
+
+  it("[보안] claimAll 후 claimAll 재시도 → 추가 지급 없음", async function () {
+    const { bond, usdc, investor, pay1 } = await setupForClaimAll();
+    await time.increaseTo(pay1 + 1);
+
+    await bond.connect(investor).claimAll();
+
+    const usdcBefore = await usdc.balanceOf(investor.address);
+    await bond.connect(investor).claimAll(); // 재시도 (revert 아님, 그냥 skip)
+    const usdcAfter = await usdc.balanceOf(investor.address);
+
+    // 추가 지급 없음
+    expect(usdcAfter).to.equal(usdcBefore);
+  });
+
+  it("[보안] A가 claimAll 후 토큰 B에게 전송 → B의 같은 회차 claim 불가 (paymentCap)", async function () {
+    const { bond, usdc, issuer, investor, investor2, pay1 } = await setupForClaimAll();
+    await time.increaseTo(pay1 + 1);
+
+    // A: claimAll (pay1 수령)
+    await bond.connect(investor).claimAll();
+
+    // A → B 전체 토큰 이전
+    await bond.connect(investor).transfer(investor2.address, NOTIONAL);
+
+    // B가 pay1(index=0) claim 시도 → paymentCap 초과
+    await expect(
+      bond.connect(investor2).claim(0)
+    ).to.be.revertedWith("payment cap exceeded");
+  });
+
+  it("[보안] Reserve 부족 시 claimAll → revert (중간에 실패)", async function () {
+    const [, issuer, investor, , opsWallet] = await ethers.getSigners();
+    const now      = await time.latest();
+    const subStart = now;
+    const issue    = now + 1 * 24 * 3600;
+    const pay1     = now + 10 * 24 * 3600;
+    const pay2     = now + 20 * 24 * 3600;
+    const pay3     = now + 30 * 24 * 3600;
+
+    const MockUSDC = await ethers.getContractFactory("MockUSDC");
+    const usdc = await MockUSDC.deploy();
+    await usdc.mint(issuer.address,   ethers.parseUnits("1000000", 6));
+    await usdc.mint(investor.address, ethers.parseUnits("100000",  6));
+
+    const Bond = await ethers.getContractFactory("StructuredBond");
+    const bond = await Bond.deploy(
+      "LOW-RESERVE", "LR",
+      issuer.address, await usdc.getAddress(), opsWallet.address,
+      NOTIONAL, 1000, subStart, issue, 3,
+      [pay1, pay2, pay3],
+      [COUPON, COUPON, PRINCIPAL],
+      [false, false, true]
+    );
+
+    await usdc.connect(investor).approve(await bond.getAddress(), NOTIONAL);
+    await bond.connect(investor).subscribe(NOTIONAL);
+    await time.increaseTo(issue + 1);
+    await bond.completeIssuance();
+
+    // 쿠폰 1회분만 적립 (2회차 이후 부족)
+    const onlyCoupon1 = NOTIONAL * COUPON / 1_000_000n;
+    await usdc.connect(issuer).approve(await bond.getAddress(), onlyCoupon1);
+    await bond.connect(issuer).reserve(onlyCoupon1);
+
+    // pay2도 도래한 시점에 claimAll → 1회차 수령 후 2회차에서 insufficient reserve
+    await time.increaseTo(pay2 + 1);
+    await expect(
+      bond.connect(investor).claimAll()
+    ).to.be.revertedWith("insufficient reserve");
+  });
+});
+
+// ─────────────────────────────────────────────────────────────
 describe("StructuredBond — 발행자 이전", function () {
 
   it("발행자가 주소를 이전하면 새 발행자만 reserve 가능", async function () {
