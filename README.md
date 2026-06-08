@@ -70,6 +70,7 @@
   ├── reserve()            발행자가 지급용 USDC 적립
   ├── checkReserveForPayment() 체크포인트 도달 시 Reserve 검증
   ├── claim(index)         지급일 도래 시 쿠폰/원금 수령
+  ├── claimAll()           미수령 회차 일괄 수령 (가스비 절약)
   ├── withdrawExcessReserve()  잉여 Reserve 회수
   ├── transferIssuer()     발행자 주소 이전 (키 탈취 대응)
   └── accruedInterestPerToken() 경과이자 조회 (Act/360)
@@ -201,9 +202,13 @@ Prettier  — Prettier          (코드 자동 정렬)
 
 ```bash
 npm install
+```
 
-cp .env.example .env
-# .env 에 PRIVATE_KEY 입력 (MetaMask 개인키, 0x 포함)
+루트에 `.env` 파일을 직접 생성하세요 (`.env.example` 없음):
+
+```
+PRIVATE_KEY=0x...          # MetaMask 개인키
+SEPOLIA_RPC_URL=https://ethereum-sepolia-rpc.publicnode.com
 ```
 
 ### hardhat.config.js 네트워크
@@ -229,7 +234,7 @@ networks: {
 ## 6. 테스트
 
 ```bash
-npx hardhat test              # 전체 실행 (45개)
+npx hardhat test              # 전체 실행 (55개)
 npx hardhat test --grep "청약" # 특정 케이스만
 npx hardhat test test/StructuredBond.test.js  # 파일 지정
 ```
@@ -247,9 +252,10 @@ npx hardhat test test/StructuredBond.test.js  # 파일 지정
 | 무이표채 E2E | 2 |
 | 경과이자 조회 (Act/360, 재기산) | 3 |
 | 잉여 Reserve 회수 | 2 |
+| claimAll (일괄 수령, 보안, 재진입 방지) | 10 |
 | 발행자 이전 | 1 |
 | BondFactory (생성, 화이트리스트, 목록, E2E) | 11 |
-| **합계** | **45** |
+| **합계** | **55** |
 
 ---
 
@@ -322,6 +328,11 @@ Arbitrum → 확장 가능
 [x] 경과이자 (Dirty Price) 표시
 [x] 청약 / Reserve 적립 / 쿠폰·원금 수령 UI
 [x] 잉여 Reserve 회수 UI
+[x] 캐시플로우 바 차트 (쿠폰=파랑, 원금=주황 스택)
+[x] 투자자 예상 수령액 표시 (토큰 보유자만)
+[x] 만기 기간 표시 (소수점 연 단위)
+[x] 수령 완료 상태 표시 (claimed[address][i] 온체인 조회)
+[x] 일괄 수령 버튼 claimAll() (미수령 2건 이상 시 노출)
 [ ] cancelSubscription UI (청약 취소)
 [ ] checkReserveForPayment UI (Reserve 체크포인트)
 [ ] Vercel 배포
@@ -374,6 +385,9 @@ Arbitrum → 확장 가능
 | 2026-06-04 | [Note/20260604.md](Note/20260604.md) | 온체인 옵션 분석 → 구조화채권으로 수렴 |
 | 2026-06-05 | [docs/StructuredBond_v3_spec.md](docs/StructuredBond_v3_spec.md) | v3 전체 설계 확정 |
 | 2026-06-05 | [CONTEXT.md](CONTEXT.md) | 프론트엔드 구현 완료, Sepolia 실전 테스트, 다음 작업 정리 |
+| 2026-06-08 | [docs/FundingCarryBond_spec.md](docs/FundingCarryBond_spec.md) | 펀딩비 기반 고정금리 채권 설계 확정 (델타뉴트럴, minReserve, 청산 트리거) |
+| 2026-06-08 | [docs/Vision_Roadmap.md](docs/Vision_Roadmap.md) | 장기 비전 및 전체 로드맵 (FundingCarryBond → GovernanceFund → 구조화상품) |
+| 2026-06-08 | contracts/StructuredBond.sol | claimAll() 추가, 테스트 55개 전부 통과 |
 
 설계 참고 문서:
 

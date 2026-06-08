@@ -128,6 +128,8 @@ npm run dev   # localhost:3001
 - ✅ 캐시플로우 세로 바 차트 (쿠폰=파랑, 원금=주황 스택)
 - ✅ 투자자 예상 수령액 표시 (토큰 보유자에게만)
 - ✅ 만기 기간 표시 (소수점 연 단위)
+- ✅ 수령 완료 상태 표시 (claimed[address][i] 온체인 조회, ✓ 수령 완료 라벨)
+- ✅ 일괄 수령 버튼 (claimAll — 미수령 2건 이상 시 헤더에 노출)
 
 ## 2026-06-08 추가 설계
 - 펀딩비 기반 고정금리 채권 (FundingCarryBond) 설계 확정
@@ -148,7 +150,6 @@ npm run dev   # localhost:3001
 ### 미구현 기능 (다음 작업 후보)
 - ❌ `cancelSubscription()` 버튼 (청약 취소, 발효일 전)
 - ❌ `checkReserveForPayment()` 버튼 (Reserve 체크포인트)
-- ❌ `withdrawExcessReserve()` 버튼 (잉여 Reserve 회수)
 - ❌ 투자자의 현재 보유 토큰 수량 표시
 
 ---
@@ -190,10 +191,6 @@ subscribe()로 직접 청약, FCFS 방식
 ---
 
 ## 8. 다음에 해야 할 작업 (우선순위 순)
-
-### 🔴 즉시: StructuredBond claimAll() 추가
-- 미수령 쿠폰 한번에 수령 (가스비 절약)
-- 컨트랙트 재배포 필요 → HyperEVM 배포 시 같이 반영
 
 ### 🔴 최우선: HyperEVM precompile 조사
 - HL Spot / Perp 오더북을 컨트랙트에서 직접 호출 가능한지 확인
