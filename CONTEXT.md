@@ -135,6 +135,15 @@ npm run dev   # localhost:3001
 - 거버넌스 펀드 방향성 확정 (Phase 4)
 - 다음 최우선 작업: HyperEVM precompile 조사 → FundingCarryStrategy 구현
 
+### 2026-06-08 추가 확정 내용
+- minReserve = 연 이표 × 1.2 (컨트랙트 강제)
+- 청산 트리거: 해당 구간 펀딩비 수익 < 다음 이표 지급액 (Reserve 깎이는 순간)
+- Keeper 역할: 발행자(리밸런싱) / 투자자(청산)
+- 컨트랙트 자체가 포지션 보유 주체 (발행자도 직접 인출 불가)
+- 원금 별도 Reserve 불필요 (델타뉴트럴 포지션에서 자연 보존)
+- claimAll() 추가 예정 (미수령 쿠폰 일괄 수령)
+- ver.1은 소액 테스트 우선, Audit 후 확대
+
 ### 미구현 기능 (다음 작업 후보)
 - ❌ `cancelSubscription()` 버튼 (청약 취소, 발효일 전)
 - ❌ `checkReserveForPayment()` 버튼 (Reserve 체크포인트)
@@ -180,6 +189,10 @@ subscribe()로 직접 청약, FCFS 방식
 ---
 
 ## 8. 다음에 해야 할 작업 (우선순위 순)
+
+### 🔴 즉시: StructuredBond claimAll() 추가
+- 미수령 쿠폰 한번에 수령 (가스비 절약)
+- 컨트랙트 재배포 필요 → HyperEVM 배포 시 같이 반영
 
 ### 🔴 최우선: HyperEVM precompile 조사
 - HL Spot / Perp 오더북을 컨트랙트에서 직접 호출 가능한지 확인
