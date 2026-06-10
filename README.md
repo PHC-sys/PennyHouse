@@ -368,16 +368,23 @@ Arbitrum → 확장 가능
 ```
 [x] 투표 → 비중 결정 알고리즘 설계·검증 (Target 방식, 적응형 alpha)
 [x] 백테스트 엔진 검증 (Perfect 우위·주기 불변성 자동 테스트 통과)
-[ ] governance_engine 모듈 추출 (노트북 → 재사용 .py)
-[ ] 백테스트 + 페이퍼 트레이딩 웹사이트 (돈 없이 투표 체험)
+[x] governance_engine 모듈 추출 (노트북 → 재사용 .py)
+[x] 백테스트 + 페이퍼 트레이딩 웹사이트 (FastAPI + lightweight-charts)
 [ ] AI Keeper (HL REST API 주문 실행, 지정가 추격)
 [ ] 투표/예치금 스마트컨트랙트 (HyperEVM)
 [ ] 청산 위험 실시간 모니터링 (상시 서버)
 ```
 
+실행:
+```bash
+pip install -r governance/requirements.txt
+python -m uvicorn governance.api.main:app --port 8099   # → http://127.0.0.1:8099
+```
+
 > 본체 스펙: [docs/specs/GovernanceFund_spec.md](docs/specs/GovernanceFund_spec.md)  
-> 백테스트/페이퍼 사이트: [docs/specs/GovernanceFund_Backtest_spec.md](docs/specs/GovernanceFund_Backtest_spec.md)  
-> 검증 노트북: [backtest/GovernanceFund_weight_decision/](backtest/GovernanceFund_weight_decision/)
+> 백테스트/페이퍼 사이트 스펙: [docs/specs/GovernanceFund_Backtest_spec.md](docs/specs/GovernanceFund_Backtest_spec.md)  
+> **사용 가이드**: [docs/guides/GovernanceFund_site_usage.md](docs/guides/GovernanceFund_site_usage.md)  
+> 사이트 코드: [governance/](governance/) · 검증 노트북: [backtest/GovernanceFund_weight_decision/](backtest/GovernanceFund_weight_decision/)
 
 ### Phase 5 — 제도권 연동
 

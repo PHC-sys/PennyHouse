@@ -171,10 +171,24 @@ npm run dev   # localhost:3001
 - 프로파일: 공격적 T=7일/MAX 80%/5x, 보수적 T=21일/MAX 60%/2x
 - 레버리지: 코인별 동일(전체 레버리지 고정), 롱/숏 양방향
 
-#### GovernanceFund 다음 작업
-1. governance_engine 모듈 추출 (노트북 → 재사용 .py) ← 다음
-2. 백테스트 + 페이퍼 트레이딩 웹사이트 (FastAPI + Next.js + lightweight-charts)
-3. AI Keeper 프로토타입 → 컨트랙트
+#### GovernanceFund 진행 상황
+1. ✅ governance_engine 모듈 추출 (노트북 → `governance/engine/*.py`)
+2. ✅ 백테스트 + 페이퍼 트레이딩 웹사이트 (FastAPI + 정적 프론트 + lightweight-charts)
+   - 위치: `governance/` (engine/api/web/tests)
+   - 실행: `python -m uvicorn governance.api.main:app --port 8099` → http://127.0.0.1:8099
+   - 사용 가이드: `docs/guides/GovernanceFund_site_usage.md`
+   - ※ 프론트는 Next.js 대신 정적 HTML/JS 선택 (빠른 MVP, 추후 이식 가능)
+3. ⬜ AI Keeper 프로토타입 (governance.engine 재사용 → 실제 HL 주문) ← 다음
+4. ⬜ 온체인 투표/예치 컨트랙트
+
+#### governance/ 구조 (2026-06-10 신규)
+```
+engine/   profiles, alpha, voting, prices, scenarios, backtest (검증된 핵심 로직)
+api/      main.py(엔드포인트), paper.py(페이퍼 상태 인메모리)
+web/      index.html, style.css, app.js (2탭: 백테스트/페이퍼)
+tests/    test_engine.py (assert 검증 통과)
+```
+- 페이퍼 상태는 인메모리 MVP → 추후 SQLite, 인증 없음 → 추후 지갑서명
 
 #### 인프라 결정 사항 (논의 완료)
 - Keeper 실행: GitHub Actions cron(주간 리밸런싱) + Render 상시서버(청산 모니터링)
