@@ -1,8 +1,17 @@
 # PennyHouse
 
-> 누구나 채권 계약 조건을 입력하면 스마트 컨트랙트가 자동 배포되고,  
-> 청약(Subscribe) → 발효(Issue) → 쿠폰 지급(Claim) → 원금 상환(Redeem) 전 과정이  
-> 온체인에서 자동 처리되는 채권 발행 플랫폼.
+> Hyperliquid 기반 온체인 금융 플랫폼.
+
+**두 축으로 구성:**
+
+1. **StructuredBond** (Phase 1·2 완료) — 누구나 채권 조건을 입력하면 스마트 컨트랙트가
+   자동 배포되고, 청약 → 발효 → 쿠폰 지급 → 원금 상환이 온체인에서 자동 처리되는 채권 발행 플랫폼.
+2. **GovernanceFund** (🔴 현재 핵심) — 참여자가 투표로 포트폴리오를 정하고
+   AI Keeper가 Hyperliquid Perp에서 자동 운용하는 사모 거버넌스 펀드.
+   → [docs/specs/GovernanceFund_spec.md](docs/specs/GovernanceFund_spec.md)
+
+> ⚠️ 본 README의 2~7장은 StructuredBond(채권) 기준입니다.
+> 현재 핵심 작업인 GovernanceFund는 8장 로드맵 Phase 4와 별도 스펙 문서를 참조하세요.
 
 ---
 
@@ -338,31 +347,37 @@ Arbitrum → 확장 가능
 [ ] Vercel 배포
 ```
 
-### Phase 3 — HyperEVM 배포 & FundingCarryBond
+### Phase 3 — FundingCarryBond (⏸ 보류)
+
+> 2026-06-10 백테스트 결과 보류. 펀딩비가 쿠폰 APY를 못 따라가는 구간에서  
+> 발행자 구조적 손실. 재검토 조건 충족 시 재개.  
+> 상세: [docs/research/FundingCarryBond_backtest.md](docs/research/FundingCarryBond_backtest.md)
 
 ```
-[ ] HyperEVM 배포 (BondFactory + StructuredBond)
-[ ] HyperEVM precompile 조사 (HL Spot/Perp 접근, 펀딩비 온체인 조회)
-[ ] FundingCarryStrategy 컨트랙트 구현
-      - 현물 매수 + 무기한 선물 숏 (델타뉴트럴)
-      - 펀딩비 수취 → Reserve 자동 충전
-      - 청산 트리거 + liquidate()
+[~] HyperEVM precompile 조사 (완료)
+[ ] FundingCarryStrategy 컨트랙트 (보류 — 재검토 조건 대기)
 [ ] StructuredBond에 strategyContract 옵션 추가
-[ ] HL Spot 오더북 (HIP-1) 채권 토큰 상장
-[ ] 프론트엔드: YTM, 펀딩비 현황, 청산 트리거 표시
 ```
 
-> 설계 상세: [docs/specs/FundingCarryBond_spec.md](docs/specs/FundingCarryBond_spec.md)  
-> 기술 조사: [docs/research/HyperEVM_precompile.md](docs/research/HyperEVM_precompile.md)
+> 설계 상세: [docs/specs/FundingCarryBond_spec.md](docs/specs/FundingCarryBond_spec.md)
 
-### Phase 4 — 거버넌스 펀드
+### Phase 4 — GovernanceFund (🔴 현재 핵심 방향)
+
+사모 거버넌스 투자 펀드. 참여자 투표로 포트폴리오 결정, AI Keeper 자동 실행.
 
 ```
-[ ] 투표 기반 포트폴리오 운용 (지분 가중 투표)
-[ ] 리밸런싱 컨트랙트 (누구나 rebalance() 호출 + 소액 인센티브)
-[ ] BTC/ETH/USDC 비중 투표 → HL에서 자동 스왑
-[ ] 레버리지 / Cross Asset 캐리 전략 확장
+[x] 투표 → 비중 결정 알고리즘 설계·검증 (Target 방식, 적응형 alpha)
+[x] 백테스트 엔진 검증 (Perfect 우위·주기 불변성 자동 테스트 통과)
+[ ] governance_engine 모듈 추출 (노트북 → 재사용 .py)
+[ ] 백테스트 + 페이퍼 트레이딩 웹사이트 (돈 없이 투표 체험)
+[ ] AI Keeper (HL REST API 주문 실행, 지정가 추격)
+[ ] 투표/예치금 스마트컨트랙트 (HyperEVM)
+[ ] 청산 위험 실시간 모니터링 (상시 서버)
 ```
+
+> 본체 스펙: [docs/specs/GovernanceFund_spec.md](docs/specs/GovernanceFund_spec.md)  
+> 백테스트/페이퍼 사이트: [docs/specs/GovernanceFund_Backtest_spec.md](docs/specs/GovernanceFund_Backtest_spec.md)  
+> 검증 노트북: [backtest/GovernanceFund_weight_decision/](backtest/GovernanceFund_weight_decision/)
 
 ### Phase 5 — 제도권 연동
 
@@ -390,6 +405,10 @@ Arbitrum → 확장 가능
 | 2026-06-08 | [docs/Vision_Roadmap.md](docs/Vision_Roadmap.md) | 장기 비전 및 전체 로드맵 (FundingCarryBond → GovernanceFund → 구조화상품) |
 | 2026-06-08 | [docs/research/HyperEVM_precompile.md](docs/research/HyperEVM_precompile.md) | HyperEVM precompile 기술 조사 (온체인 캐리 가능성 확인) |
 | 2026-06-08 | contracts/StructuredBond.sol | claimAll() 추가, 테스트 55개 전부 통과 |
+| 2026-06-10 | [docs/research/FundingCarryBond_backtest.md](docs/research/FundingCarryBond_backtest.md) | FundingCarryBond 백테스트 → 보류 결정, GovernanceFund로 방향 전환 |
+| 2026-06-10 | [docs/specs/GovernanceFund_spec.md](docs/specs/GovernanceFund_spec.md) | 거버넌스 펀드 본체 스펙 (투표→비중 5단계 파이프라인) |
+| 2026-06-10 | [docs/specs/GovernanceFund_Backtest_spec.md](docs/specs/GovernanceFund_Backtest_spec.md) | 백테스트/페이퍼 트레이딩 사이트 스펙 |
+| 2026-06-10 | [backtest/GovernanceFund_weight_decision/](backtest/GovernanceFund_weight_decision/) | 투표 알고리즘(Target+적응형 alpha) 검증, 백테스트 엔진, 자동 테스트 |
 
 설계 참고 문서:
 

@@ -151,9 +151,35 @@ npm run dev   # localhost:3001
 ### GovernanceFund → 신규 최우선
 
 사모 거버넌스 투자 펀드. 참여자 투표로 포트폴리오 결정, AI Keeper 자동 실행.
-- 상세 스펙: `docs/specs/GovernanceFund_spec.md`
+- 본체 스펙: `docs/specs/GovernanceFund_spec.md`
+- 백테스트/페이퍼 사이트 스펙: `docs/specs/GovernanceFund_Backtest_spec.md`
 - 시드 투자자 확보 완료 (부장님 참여 확정)
-- Phase 1 목표: 오프체인 MVP + AI Keeper 프로토타입
+
+#### 투표 → 비중 알고리즘 (검증 완료, 2026-06-10)
+- 노트북: `backtest/GovernanceFund_weight_decision/01,02.ipynb`
+- 검증 스크립트: `_verify_voting.py`, `_verify_engine.py` (assert 5/5 통과)
+- **5단계 파이프라인**:
+  1. 방향성 투표 (-2~+2, Kahoot 스타일)
+  2. 예치금 가중 집계 → score(-1~+1)  [simulate_votes]
+  3. 목표 비중 산출 (Target 방식, 부호=롱/숏)  [votes_to_target]
+     - `target = score × vol_factor`, 정규화 `sum(abs)=100`
+     - 증분 방식은 방향 전환 느려 폐기, Target 방식 채택
+  4. 적응형 EMA 수렴  [adaptive_alpha]
+     - `alpha = 1 - 0.1^(투표주기/T_CONVERGE)`
+     - 주기 반비례 → 달력 기준 동일 반응속도 (검증됨)
+  5. AI Keeper 실행 (HL REST, 지정가 추격→시장가 폴백)
+- 프로파일: 공격적 T=7일/MAX 80%/5x, 보수적 T=21일/MAX 60%/2x
+- 레버리지: 코인별 동일(전체 레버리지 고정), 롱/숏 양방향
+
+#### GovernanceFund 다음 작업
+1. governance_engine 모듈 추출 (노트북 → 재사용 .py) ← 다음
+2. 백테스트 + 페이퍼 트레이딩 웹사이트 (FastAPI + Next.js + lightweight-charts)
+3. AI Keeper 프로토타입 → 컨트랙트
+
+#### 인프라 결정 사항 (논의 완료)
+- Keeper 실행: GitHub Actions cron(주간 리밸런싱) + Render 상시서버(청산 모니터링)
+- 차트 데이터: HL candleSnapshot API (검증 완료, lightweight-charts 호환)
+- 배포 우선순위: 돈/컨트랙트 불필요한 백테스트·페이퍼 사이트부터
 
 ### 미구현 기능 (다음 작업 후보)
 - ❌ `cancelSubscription()` 버튼 (청약 취소, 발효일 전)
