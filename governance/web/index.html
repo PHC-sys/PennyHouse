@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GovernanceFund — 백테스트 & 페이퍼 트레이딩</title>
+<script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>🏛️ GovernanceFund <span class="sub">백테스트 & 페이퍼 트레이딩</span></h1>
+  <nav class="tabs">
+    <button class="tab active" data-tab="backtest">📈 과거 백테스트</button>
+    <button class="tab" data-tab="paper">🗳️ 라이브 페이퍼 트레이딩</button>
+  </nav>
+</header>
+
+<!-- ════════════ 백테스트 ════════════ -->
+<section id="tab-backtest" class="tab-panel active">
+  <div class="controls card">
+    <div class="ctrl">
+      <label>펀드 프로파일</label>
+      <select id="bt-profile">
+        <option value="aggressive">공격적 (T=7일, 5x)</option>
+        <option value="conservative">보수적 (T=21일, 2x)</option>
+      </select>
+    </div>
+    <div class="ctrl">
+      <label>기간 (일)</label>
+      <select id="bt-days">
+        <option value="90">90일</option>
+        <option value="180" selected>180일</option>
+      </select>
+    </div>
+    <div class="ctrl">
+      <label>투표 주기 (일)</label>
+      <select id="bt-period">
+        <option value="1">매일</option>
+        <option value="3">3일</option>
+        <option value="7" selected>주간</option>
+      </select>
+    </div>
+    <button id="bt-run" class="primary">백테스트 실행 ▶</button>
+    <span id="bt-alpha" class="hint"></span>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <h3>누적 수익률 (vs Buy & Hold)</h3>
+      <div id="bt-chart" class="chart"></div>
+      <div id="bt-legend" class="legend"></div>
+    </div>
+    <div class="card">
+      <h3>성과 지표</h3>
+      <div id="bt-metrics" class="metrics"></div>
+      <p class="note">💡 <b>Perfect(완벽 예측)</b>가 압도적으로 이기는 게 정상입니다.
+      이는 "투표가 정확하면 수익이 난다"는 메커니즘 검증이며,
+      <b>실제 수익은 참여자의 투표 품질이 결정</b>합니다.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>종목 차트 (Hyperliquid)</h3>
+    <div class="ctrl-inline">
+      <span>코인:</span>
+      <div id="coin-buttons" class="coin-btns"></div>
+    </div>
+    <div id="price-chart" class="chart tall"></div>
+  </div>
+</section>
+
+<!-- ════════════ 페이퍼 트레이딩 ════════════ -->
+<section id="tab-paper" class="tab-panel">
+  <div class="grid2">
+    <div class="card">
+      <h3>🗳️ 투표하기</h3>
+      <div class="ctrl">
+        <label>닉네임</label>
+        <input id="pp-user" type="text" placeholder="예: 부장님" value="나">
+      </div>
+      <div class="ctrl">
+        <label>가상 예치금 ($)</label>
+        <input id="pp-deposit" type="number" value="10000" step="1000">
+      </div>
+      <div class="ctrl">
+        <label>펀드 프로파일</label>
+        <select id="pp-profile">
+          <option value="aggressive">공격적 (5x)</option>
+          <option value="conservative">보수적 (2x)</option>
+        </select>
+      </div>
+      <div id="vote-rows" class="vote-rows"></div>
+      <button id="pp-submit" class="primary wide">투표 제출 / 갱신</button>
+      <button id="pp-reset" class="ghost wide">세션 초기화</button>
+    </div>
+
+    <div class="card">
+      <h3>💰 펀드 현황</h3>
+      <div class="big-stat">
+        <span class="label">펀드 수익률</span>
+        <span id="pp-return" class="value">—</span>
+      </div>
+      <div class="big-stat">
+        <span class="label">펀드 자산</span>
+        <span id="pp-equity" class="value small">—</span>
+      </div>
+      <h4>현재 포트폴리오 (목표 → 현재)</h4>
+      <div id="pp-weights" class="weights"></div>
+      <h4>실시간 NAV</h4>
+      <div id="pp-nav-chart" class="chart"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>🏆 리더보드</h3>
+    <table id="pp-leaderboard" class="lb"><thead><tr>
+      <th>#</th><th>닉네임</th><th>예치금</th><th>지분</th><th>평가액</th><th>수익률</th>
+    </tr></thead><tbody></tbody></table>
+    <p class="note">페이퍼 트레이딩은 실제 돈 없이 메커니즘을 체험하는 모드입니다.
+    HL 실시간 가격으로 가상 포지션을 평가합니다.</p>
+  </div>
+</section>
+
+<script src="app.js"></script>
+</body>
+</html>
