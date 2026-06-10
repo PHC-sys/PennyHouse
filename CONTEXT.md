@@ -134,20 +134,26 @@ npm run dev   # localhost:3001
 ## 2026-06-08 추가 설계
 - 펀딩비 기반 고정금리 채권 (FundingCarryBond) 설계 확정
 - 상세 스펙: `docs/specs/FundingCarryBond_spec.md`
-- 거버넌스 펀드 방향성 확정 (Phase 4)
 - HyperEVM precompile 조사 완료: `docs/research/HyperEVM_precompile.md` 참조
 - 결론: 온체인 캐리 가능. CoreWriter 비동기 → 2-Phase Commit 패턴 필수
-- 다음 최우선 작업: FundingCarryStrategy 컨트랙트 구현 (hyper-evm-lib 기반)
 - 전체 비전 및 장기 로드맵: `docs/Vision_Roadmap.md` 참조
 
-### 2026-06-08 추가 확정 내용
-- minReserve = 연 이표 × 1.2 (컨트랙트 강제)
-- 청산 트리거: 해당 구간 펀딩비 수익 < 다음 이표 지급액 (Reserve 깎이는 순간)
-- Keeper 역할: 발행자(리밸런싱) / 투자자(청산)
-- 컨트랙트 자체가 포지션 보유 주체 (발행자도 직접 인출 불가)
-- 원금 별도 Reserve 불필요 (델타뉴트럴 포지션에서 자연 보존)
-- claimAll() 추가 예정 (미수령 쿠폰 일괄 수령)
-- ver.1은 소액 테스트 우선, Audit 후 확대
+## ⚠️ 2026-06-10 방향 전환 — FundingCarryBond 보류, GovernanceFund 신규 착수
+
+### FundingCarryBond → 보류
+
+백테스트 결과 (상세: `docs/research/FundingCarryBond_backtest.md`):
+- HYPE 3x는 연 17% 발행자 ROI로 경제성 확인 ✅
+- BTC는 최근 펀딩비(7~8%) < 쿠폰(8%) → 발행자 구조적 손실 ❌
+- 고정 쿠폰이 발행자에게 시장 리스크 집중 → 구현 보류
+- 재검토 조건: 펀딩 15%+ 안정화 또는 플로팅 쿠폰 전환
+
+### GovernanceFund → 신규 최우선
+
+사모 거버넌스 투자 펀드. 참여자 투표로 포트폴리오 결정, AI Keeper 자동 실행.
+- 상세 스펙: `docs/specs/GovernanceFund_spec.md`
+- 시드 투자자 확보 완료 (부장님 참여 확정)
+- Phase 1 목표: 오프체인 MVP + AI Keeper 프로토타입
 
 ### 미구현 기능 (다음 작업 후보)
 - ❌ `cancelSubscription()` 버튼 (청약 취소, 발효일 전)
@@ -194,12 +200,13 @@ subscribe()로 직접 청약, FCFS 방식
 
 ## 8. 다음에 해야 할 작업 (우선순위 순)
 
-### 🔴 최우선: FundingCarryBond 구현
-- 설계 스펙: `docs/FundingCarryBond_spec.md`
-- FundingCarryStrategy 컨트랙트 (현물+숏, 펀딩비 수취, 청산 트리거)
-- StructuredBond에 strategyContract 옵션 추가
+### 🔴 최우선: GovernanceFund MVP
+- 스펙: `docs/specs/GovernanceFund_spec.md`
+- AI Keeper 프로토타입 (HL REST API 연동, 가중평균 비중 → 리밸런싱)
+- 웹 UI MVP (대시보드 + 투표 화면)
+- 오프체인 투표 집계 (DB)
 
-### 🟡 병행: HyperEVM 배포
+### 🟡 병행: HyperEVM 배포 (StructuredBond)
 ```
 1. hardhat.config.js 확인 (hyperEVM 네트워크 이미 설정됨)
 2. HyperEVM USDC 주소 확인
@@ -207,16 +214,15 @@ subscribe()로 직접 청약, FCFS 방식
 4. frontend/lib/config.ts에 HyperEVM 네트워크 추가
 ```
 
-### 🟡 프론트엔드 미구현 기능
+### 🟡 프론트엔드 미구현 기능 (StructuredBond)
 - `cancelSubscription()` 버튼
 - `checkReserveForPayment()` 버튼
 
-### 🟢 이후: 거버넌스 펀드 (Phase 4)
-- 투표 기반 포트폴리오 운용
-- FundingCarryBond 전략의 자연스러운 확장
+### 🟢 보류: FundingCarryBond 구현
+- 재검토 조건 충족 시 착수: `docs/research/FundingCarryBond_backtest.md` 참조
 
 ### 🟢 Vercel 배포
-- Phase 2 완료
+- GovernanceFund MVP 완료 후
 
 ---
 
