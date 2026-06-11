@@ -1,13 +1,13 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { api, cls } from '@/components/api';
+import { api, cls, smartNum } from '@/components/api';
 import { Candles, Line } from '@/components/Charts';
 import AssetPicker, { VOL } from '@/components/AssetPicker';
 import { useLiveMids } from '@/components/useLive';
 
 const INTERVALS = ['1h', '4h', '1d', '1w'];
-const FMT = (v) => (v == null ? '—' : v >= 1000 ? v.toLocaleString()
-  : v >= 1 ? v.toFixed(2) : v.toPrecision(4));
+const INTERVAL_SEC = { '1h': 3600, '4h': 14400, '1d': 86400, '1w': 604800 };
+const FMT = smartNum;
 
 export default function AssetModal({ asset, onClose }) {
   const [interval, setInterval] = useState('1d');
@@ -102,7 +102,8 @@ export default function AssetModal({ asset, onClose }) {
                 <span>C <span className={h.close >= h.open ? 'pos' : 'neg'}>{FMT(h.close)}</span></span>
               </div>
             )}
-            <Candles data={candles} height={340} onCrosshair={setHover} livePrice={livePrice} />
+            <Candles data={candles} height={340} onCrosshair={setHover}
+              livePrice={livePrice} intervalSec={INTERVAL_SEC[interval]} />
           </div>
 
           {/* 펀딩 + 상대가격 */}

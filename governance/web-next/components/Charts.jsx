@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useRef } from 'react';
 import { createChart, LineStyle, CrosshairMode } from 'lightweight-charts';
+import { smartNum } from '@/components/api';
 
 const BASE = {
   layout: { background: { color: 'transparent' }, textColor: '#7d8a9c', fontFamily: 'inherit' },
@@ -8,6 +9,7 @@ const BASE = {
   rightPriceScale: { borderColor: '#1f2937' },
   timeScale: { borderColor: '#1f2937', rightOffset: 6, minBarSpacing: 0.5 },
   crosshair: { mode: CrosshairMode.Normal },
+  localization: { priceFormatter: smartNum },  // 동적 소수점 (축·툴팁)
   handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true },
   handleScale: { mouseWheel: true, pinch: true,
     axisPressedMouseMove: { time: true, price: true } },
@@ -50,8 +52,8 @@ export function MultiLine({ lines, height = 300, logScale = false }) {
 }
 
 // 캔들 — 차트/시리즈는 mount 시 생성, 데이터만 갱신 (StrictMode 안전)
-// onCrosshair: 호버 중인 캔들 콜백 / livePrice: 진행 중 봉을 실시간 갱신
-export function Candles({ data, height = 360, onCrosshair, livePrice }) {
+// onCrosshair: 호버 콜백 / livePrice: 진행 봉 실시간 갱신 / intervalSec: 새 봉 자동 생성
+export function Candles({ data, height = 360, onCrosshair, livePrice, intervalSec }) {
   const elRef = useRef(null);
   const chartRef = useRef(null);
   const sRef = useRef(null);
@@ -83,15 +85,23 @@ export function Candles({ data, height = 360, onCrosshair, livePrice }) {
       chartRef.current?.timeScale().fitContent();
     }
   }, [data]);
-  // 라이브 가격으로 마지막 봉의 종가/고저 갱신 (전체 재로딩 X)
+  // 라이브 가격으로 마지막 봉 갱신 + 기간 넘어가면 새 봉 자동 생성
   useEffect(() => {
     const lb = lastBarRef.current;
     if (!sRef.current || !lb || livePrice == null) return;
-    const updated = { ...lb, close: livePrice,
-      high: Math.max(lb.high, livePrice), low: Math.min(lb.low, livePrice) };
-    lastBarRef.current = updated;
-    try { sRef.current.update(updated); } catch {}
-  }, [livePrice]);
+    const now = Math.floor(Date.now() / 1000);
+    let bar;
+    if (intervalSec && now >= lb.time + intervalSec) {
+      // 새 봉 시작 (경계에 정렬)
+      const newTime = lb.time + intervalSec * Math.floor((now - lb.time) / intervalSec);
+      bar = { time: newTime, open: livePrice, high: livePrice, low: livePrice, close: livePrice };
+    } else {
+      bar = { ...lb, close: livePrice,
+        high: Math.max(lb.high, livePrice), low: Math.min(lb.low, livePrice) };
+    }
+    lastBarRef.current = bar;
+    try { sRef.current.update(bar); } catch {}
+  }, [livePrice, intervalSec]);
   return <div ref={elRef} style={{ height }} />;
 }
 

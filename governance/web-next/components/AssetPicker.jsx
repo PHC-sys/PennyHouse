@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { api, cls } from '@/components/api';
+import { api, cls, smartNum } from '@/components/api';
 
 const TABS = [
   { key: 'all', label: 'All' },
@@ -8,8 +8,7 @@ const TABS = [
   { key: 'tradfi', label: 'TradFi' },
   { key: 'preipo', label: 'Pre-IPO' },
 ];
-const FMT = (v) => (v == null ? '—' : v >= 1000 ? v.toLocaleString()
-  : v >= 1 ? v.toFixed(2) : v.toPrecision(4));
+const FMT = smartNum;
 const VOL = (v) => !v ? '—' : v >= 1e9 ? (v / 1e9).toFixed(1) + 'B'
   : v >= 1e6 ? (v / 1e6).toFixed(1) + 'M' : (v / 1e3).toFixed(0) + 'K';
 

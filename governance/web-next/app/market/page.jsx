@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
-import { api, cls } from '@/components/api';
+import { api, cls, smartNum } from '@/components/api';
 import { Spark } from '@/components/Charts';
 import AssetModal from '@/components/AssetModal';
 import AssetPicker, { useFavs, VOL } from '@/components/AssetPicker';
@@ -163,8 +163,7 @@ function Tile({ a, spark, live, flash, onVisible, onClick, fav, onFav }) {
           </div>
           <div className={`text-[11px] text-muted stat-num inline-block px-1 -mx-1
             ${flash === 'up' ? 'flash-up' : flash === 'down' ? 'flash-down' : ''}`}>
-            {price >= 1 ? price.toLocaleString(undefined, { maximumFractionDigits: 2 })
-              : price?.toPrecision?.(4)}</div>
+            {smartNum(price)}</div>
         </div>
         <div className="text-right">
           <div className={`stat-num text-sm font-semibold ${cls(change)}`}>
