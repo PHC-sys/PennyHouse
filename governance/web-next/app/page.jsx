@@ -62,7 +62,7 @@ export default function BacktestPage() {
   }, [cfg, coin, interval, chartDays]);
   useEffect(() => {
     if (!cfg) return;
-    api(`/api/relative/${coin}/${relB}?days=${chartDays}&interval=${interval}`)
+    api(`/api/relative?a=${coin}&b=${relB}&days=${chartDays}&interval=${interval}`)
       .then((d) => setRelData(d.series)).catch(() => setRelData([]));
   }, [cfg, coin, relB, chartDays, interval]);
 
@@ -159,10 +159,11 @@ export default function BacktestPage() {
         </div>
       </div>
 
-      {/* 종목 차트 */}
+      {/* 종목 차트 (코인 선택이 아래 펀딩·상대가격까지 연동) */}
       <div className="card">
         <div className="flex items-center gap-3 flex-wrap mb-3">
-          <h3 className="font-semibold">종목 차트 <span className="text-muted text-xs">Hyperliquid</span></h3>
+          <h3 className="font-semibold">종목 차트 <span className="text-brand">{coin}</span>
+            <span className="text-muted text-xs ml-1">Hyperliquid</span></h3>
           <div className="flex gap-1.5 ml-2">
             {cfg.coins.map((c) => (
               <span key={c} className={`chip ${coin === c ? 'chip-active' : ''}`}
@@ -191,13 +192,14 @@ export default function BacktestPage() {
       {/* 펀딩 + 상대가격 */}
       <div className="grid lg:grid-cols-2 gap-5">
         <div className="card">
-          <h3 className="font-semibold mb-3">{coin} 펀딩비 추이 <span className="text-muted text-xs">연환산 %</span></h3>
+          <h3 className="font-semibold mb-3"><span className="text-brand">{coin}</span> 펀딩비 추이
+            <span className="text-muted text-xs ml-1">연환산 % · 종목 차트 선택과 연동</span></h3>
           <Line data={funding?.series || []} height={220} color="#f0b90b" area />
         </div>
         <div className="card">
           <div className="flex items-center gap-2 mb-3">
             <h3 className="font-semibold">상대가격</h3>
-            <span className="text-muted text-sm">{coin} /</span>
+            <span className="text-brand text-sm font-semibold">{coin} /</span>
             <select className="input py-1 text-xs" value={relB} onChange={(e) => setRelB(e.target.value)}>
               {cfg.coins.filter((c) => c !== coin).map((c) => <option key={c}>{c}</option>)}
             </select>

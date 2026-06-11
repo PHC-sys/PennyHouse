@@ -47,18 +47,27 @@ export function MultiLine({ lines, height = 300, logScale = false }) {
 }
 
 // 캔들 — 차트/시리즈는 mount 시 생성, 데이터만 갱신 (StrictMode 안전)
-export function Candles({ data, height = 360 }) {
+// onCrosshair: 호버 중인 캔들 {time,open,high,low,close} 또는 null 콜백
+export function Candles({ data, height = 360, onCrosshair }) {
   const elRef = useRef(null);
   const chartRef = useRef(null);
   const sRef = useRef(null);
+  const cbRef = useRef(onCrosshair);
+  cbRef.current = onCrosshair;
   useEffect(() => {
     const el = elRef.current;
     if (!el) return;
     const chart = createChart(el, { ...BASE, height, width: el.clientWidth });
     chartRef.current = chart;
-    sRef.current = chart.addCandlestickSeries({
+    const series = chart.addCandlestickSeries({
       upColor: '#26d07c', downColor: '#f6465d', borderVisible: false,
       wickUpColor: '#26d07c', wickDownColor: '#f6465d' });
+    sRef.current = series;
+    chart.subscribeCrosshairMove((param) => {
+      if (!cbRef.current) return;
+      const p = param.seriesData?.get(series);
+      cbRef.current(p ? { time: param.time, ...p } : null);
+    });
     const ro = attachResize(el, chart);
     return () => { ro.disconnect(); chart.remove(); chartRef.current = null; sRef.current = null; };
   }, [height]);

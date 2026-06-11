@@ -64,20 +64,35 @@ def get_scenarios():
 def get_assets(category: Optional[str] = None, sub: Optional[str] = None,
                search: Optional[str] = None, limit: int = 500):
     """전 자산 레지스트리 (Crypto/TradFi/Pre-IPO). 필터 지원."""
-    uni = fetch_universe()
-    if category:
-        uni = [a for a in uni if a["category"] == category]
-    if sub:
-        uni = [a for a in uni if a["sub"] == sub]
-    if search:
-        q = search.upper()
-        uni = [a for a in uni if q in a["display"].upper()]
-    # 카테고리 카운트(필터 전 전체 기준)
     full = fetch_universe()
     counts = {}
     for a in full:
         counts[a["category"]] = counts.get(a["category"], 0) + 1
-    return {"counts": counts, "total": len(full), "assets": uni[:limit]}
+
+    uni = full
+    if search:
+        q = search.upper()
+        uni = [a for a in uni if q in a["display"].upper()]
+    elif category:
+        uni = [a for a in uni if a["category"] == category]
+        if sub:
+            uni = [a for a in uni if a["sub"] == sub]
+        uni = uni[:limit]
+    else:
+        # '전체'는 카테고리 골고루 인터리브 (크립토만 깔리는 문제 방지)
+        buckets = {}
+        for a in full:
+            buckets.setdefault(a["category"], []).append(a)
+        order = ["crypto", "tradfi", "preipo"]
+        mixed, idx = [], 0
+        while len(mixed) < limit and any(idx < len(buckets.get(c, [])) for c in order):
+            for c in order:
+                b = buckets.get(c, [])
+                if idx < len(b):
+                    mixed.append(b[idx])
+            idx += 1
+        uni = mixed[:limit]
+    return {"counts": counts, "total": len(full), "assets": uni}
 
 
 @app.get("/api/spark/{symbol:path}")
@@ -103,14 +118,13 @@ def get_prices(coin: str, days: int = 90, interval: str = "1d"):
     }
 
 
-@app.get("/api/funding/{coin}")
+@app.get("/api/funding/{coin:path}")
 def get_funding(coin: str, days: int = 90):
-    coin = coin.upper()
+    coin = coin if ":" in coin else coin.upper()
     df = fetch_funding_history(coin, days=days)
     cur = fetch_current_funding([coin]).get(coin, {})
     if df is None:
         raise HTTPException(404, f"{coin} 펀딩 데이터 없음")
-    # 8시간 누적을 일 단위로 리샘플해 연환산(%) 시계열
     series = [{"time": int(ts.timestamp()),
                "value": round(float(r.fundingRate) * 24 * 365 * 100, 3)}
               for ts, r in df.iterrows()]
@@ -122,9 +136,11 @@ def get_current_funding():
     return fetch_current_funding(COINS)
 
 
-@app.get("/api/relative/{coin_a}/{coin_b}")
-def get_relative(coin_a: str, coin_b: str, days: int = 180, interval: str = "1d"):
-    a, b = coin_a.upper(), coin_b.upper()
+@app.get("/api/relative")
+def get_relative(a: str, b: str, days: int = 180, interval: str = "1d"):
+    """상대가격 A/B. HIP-3 prefix는 쿼리파라미터로 안전하게 전달."""
+    a = a if ":" in a else a.upper()
+    b = b if ":" in b else b.upper()
     series = relative_series(a, b, days=days, interval=interval)
     if not series:
         raise HTTPException(404, "상대가격 데이터 없음")

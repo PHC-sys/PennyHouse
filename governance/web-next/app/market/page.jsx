@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { api, cls } from '@/components/api';
 import { Spark } from '@/components/Charts';
+import AssetModal from '@/components/AssetModal';
 
 const CATS = [
   { key: 'all', label: '전체' },
@@ -25,6 +26,7 @@ export default function MarketPage() {
   const [search, setSearch] = useState('');
   const [data, setData] = useState(null);
   const [sortKey, setSortKey] = useState('change_24h');
+  const [selected, setSelected] = useState(null);
 
   useEffect(() => {
     const q = new URLSearchParams();
@@ -74,14 +76,16 @@ export default function MarketPage() {
       {/* 타일 그리드 */}
       <div className="grid gap-3"
         style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))' }}>
-        {assets.map((a) => <Tile key={a.symbol} a={a} />)}
+        {assets.map((a) => <Tile key={a.symbol} a={a} onClick={() => setSelected(a)} />)}
         {!assets.length && <div className="text-muted">불러오는 중…</div>}
       </div>
+
+      {selected && <AssetModal asset={selected} onClose={() => setSelected(null)} />}
     </div>
   );
 }
 
-function Tile({ a }) {
+function Tile({ a, onClick }) {
   const [spark, setSpark] = useState([]);
   useEffect(() => {
     let on = true;
@@ -90,7 +94,8 @@ function Tile({ a }) {
   }, [a.symbol]);
   const up = (a.change_24h ?? 0) >= 0;
   return (
-    <div className="card p-3 hover:shadow-glow transition cursor-default">
+    <div className="card p-3 hover:shadow-glow hover:border-brand/40 transition cursor-pointer"
+      onClick={onClick}>
       <div className="flex items-start justify-between">
         <div>
           <div className="font-bold text-sm flex items-center gap-1.5">
@@ -101,15 +106,17 @@ function Tile({ a }) {
           <div className="text-[11px] text-muted stat-num">
             {a.price >= 1 ? a.price.toLocaleString() : a.price}</div>
         </div>
-        <div className={`text-right stat-num text-sm font-semibold ${cls(a.change_24h)}`}>
-          {a.change_24h != null ? (a.change_24h > 0 ? '+' : '') + a.change_24h + '%' : '—'}
+        <div className="text-right">
+          <div className={`stat-num text-sm font-semibold ${cls(a.change_24h)}`}>
+            {a.change_24h != null ? (a.change_24h > 0 ? '+' : '') + a.change_24h + '%' : '—'}</div>
+          <div className="text-[9px] text-muted">24h</div>
         </div>
       </div>
       <div className="my-1.5"><Spark data={spark} height={44} up={up} /></div>
       <div className="flex justify-between text-[10px] text-muted">
         <span title="현재 펀딩 연환산">펀딩 <span className={cls(-a.funding_annual)}>
           {a.funding_annual}%</span></span>
-        <span>최대 {a.max_leverage}x</span>
+        <span>최근 30일 · 최대 {a.max_leverage}x</span>
       </div>
     </div>
   );
