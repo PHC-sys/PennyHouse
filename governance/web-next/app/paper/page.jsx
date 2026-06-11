@@ -50,6 +50,7 @@ export default function PaperPage() {
           <select className="input w-full" value={profile} onChange={(e) => setProfile(e.target.value)}>
             <option value="aggressive">공격적 (5x)</option>
             <option value="conservative">보수적 (2x)</option>
+            <option value="spot">현물 (1x, 레버리지 없음)</option>
           </select></div>
 
         <div className="divide-y divide-border">
@@ -89,32 +90,47 @@ export default function PaperPage() {
         <Stat label="펀드 자산" value={state ? fmtUsd(state.fund_equity) : '—'} />
 
         <div>
-          <div className="label">현재 포트폴리오 <span className="text-muted">(좌=숏 / 우=롱)</span></div>
-          <div className="space-y-1.5 mt-1">
-            {cfg.coins.map((c) => {
-              const w = state?.weights?.[c] || 0;
-              const carry = state?.funding_carry_by_coin?.[c];
-              const max = Math.max(60, ...cfg.coins.map((x) => Math.abs(state?.weights?.[x] || 0)));
-              const pctW = (Math.abs(w) / max) * 50;
-              return (
-                <div key={c} className="flex items-center gap-2">
-                  <span className="text-xs font-bold w-10">{c}</span>
-                  <div className="flex-1 h-4 rounded bg-bg border border-border relative overflow-hidden">
-                    <div className="absolute top-0 bottom-0 left-1/2 w-px bg-border" />
-                    <div className="absolute top-0 bottom-0"
-                      style={{ background: w >= 0 ? '#26d07c' : '#f6465d',
-                        width: pctW + '%', left: w >= 0 ? '50%' : 'auto',
-                        right: w >= 0 ? 'auto' : '50%' }} />
-                  </div>
-                  <span className={`text-xs w-14 text-right stat-num ${cls(w)}`}>
-                    {w > 0 ? '+' : ''}{w}%</span>
-                  <span className="text-[10px] text-muted w-16 text-right stat-num"
-                    title="펀딩 캐리(연)">
-                    {carry != null ? (carry > 0 ? '+' : '') + carry + '%' : ''}</span>
-                </div>
-              );
-            })}
+          <div className="flex items-center justify-between">
+            <div className="label mb-0">현재 포트폴리오</div>
+            <span className="text-[10px] text-muted">레버리지 {state?.leverage || '—'}x</span>
           </div>
+          <table className="w-full text-[11px] mt-1.5">
+            <thead><tr className="text-muted">
+              <th className="text-left font-medium py-1">자산</th>
+              <th className="text-right font-medium">비중</th>
+              <th className="text-right font-medium">수익률</th>
+              <th className="text-right font-medium" title="현재 펀딩이 1년 유지 가정">펀딩(연)</th>
+              <th className="text-right font-medium">평단</th>
+              <th className="text-right font-medium" title="추정 청산가까지 거리">청산까지</th>
+            </tr></thead>
+            <tbody>
+              {cfg.coins.map((c) => {
+                const a = state?.assets?.[c] || {};
+                const w = a.weight ?? 0;
+                return (
+                  <tr key={c} className="border-t border-border/60">
+                    <td className="py-1.5 font-bold">{c}
+                      <span className={`ml-1 text-[9px] ${w >= 0 ? 'pos' : 'neg'}`}>
+                        {w >= 0 ? '롱' : '숏'}</span></td>
+                    <td className={`text-right stat-num ${cls(w)}`}>{w > 0 ? '+' : ''}{w}%</td>
+                    <td className={`text-right stat-num ${cls(a.return_pct)}`}>
+                      {a.return_pct != null ? fmtPct(a.return_pct) : '—'}</td>
+                    <td className={`text-right stat-num ${cls(a.funding_carry)}`}>
+                      {a.funding_carry != null ? fmtPct(a.funding_carry) : '—'}</td>
+                    <td className="text-right stat-num text-muted">
+                      {a.avg_entry != null ? a.avg_entry.toLocaleString() : '—'}</td>
+                    <td className="text-right stat-num">
+                      {a.liq_dist_pct != null
+                        ? <span className={a.liq_dist_pct < 10 ? 'neg' : 'text-muted'}>
+                            {a.liq_dist_pct}%</span>
+                        : <span className="text-muted">—</span>}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          <p className="text-[10px] text-muted mt-1">
+            펀딩(연)=현재 펀딩레이트 1년 유지 가정 · 롱=지불(−)/숏=수취(+) · 청산가는 추정치</p>
         </div>
 
         <div><div className="label">실시간 NAV</div><Line data={navData} height={180} area /></div>

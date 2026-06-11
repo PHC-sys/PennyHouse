@@ -92,7 +92,7 @@ SCENARIO_META = {
     'contrarian': {'label': '역추세',      'desc': '최근 오른 코인 숏'},
     'ma_cross':   {'label': '이평선 교차',  'desc': '단기>장기 평균이면 롱'},
     'random':     {'label': '랜덤',        'desc': '무작위 투표'},
-    'always_long':{'label': '항상 롱',     'desc': '균등 풀 롱 (레버리지 기준선)'},
+    'always_long':{'label': '레버리지 롱',  'desc': '균등 풀 롱 (펀드 레버리지 적용 — Buy&Hold의 Nx판)'},
     'perfect':    {'label': '완벽예측(상한)', 'desc': '미래를 알고 투표'},
 }
 

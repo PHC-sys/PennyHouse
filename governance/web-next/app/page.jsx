@@ -85,6 +85,7 @@ export default function BacktestPage() {
           <select className="input" value={profile} onChange={(e) => setProfile(e.target.value)}>
             <option value="aggressive">공격적 (T=7일, 5x)</option>
             <option value="conservative">보수적 (T=21일, 2x)</option>
+            <option value="spot">현물 (T=14일, 1x)</option>
           </select>
         </Field>
         <Field label="기간 (일)">
@@ -150,6 +151,7 @@ export default function BacktestPage() {
         <div className="card lg:col-span-2 overflow-x-auto">
           <h3 className="font-semibold mb-3">성과 지표</h3>
           {result && <MetricsTable result={result} />}
+          {result && <AssetContribution result={result} />}
           <p className="text-[11px] text-muted leading-relaxed mt-3">
             💡 <b>Perfect</b>가 압도하는 게 정상 — "투표가 정확하면 수익"이라는 메커니즘 검증입니다.
             실제 수익은 <b>참여자의 투표 품질</b>이 결정합니다.
@@ -209,6 +211,42 @@ export default function BacktestPage() {
 
 function Field({ label, children }) {
   return <div className="flex flex-col"><span className="label">{label}</span>{children}</div>;
+}
+function AssetContribution({ result }) {
+  const scens = Object.keys(result.scenarios);
+  const [sel, setSel] = useState(scens.includes('momentum') ? 'momentum' : scens[0]);
+  const contrib = result.scenarios[sel]?.asset_contribution || {};
+  const coins = Object.keys(contrib);
+  const max = Math.max(1, ...coins.map((c) => Math.abs(contrib[c])));
+  return (
+    <div className="mt-4 border-t border-border pt-3">
+      <div className="flex items-center justify-between mb-2">
+        <span className="label mb-0">자산별 누적 기여도</span>
+        <select className="input py-0.5 text-xs" value={sel} onChange={(e) => setSel(e.target.value)}>
+          {scens.map((s) => <option key={s} value={s}>{result.labels?.[s] || s}</option>)}
+        </select>
+      </div>
+      <div className="space-y-1">
+        {coins.map((c) => {
+          const v = contrib[c];
+          const w = (Math.abs(v) / max) * 50;
+          return (
+            <div key={c} className="flex items-center gap-2">
+              <span className="text-[11px] font-bold w-10">{c}</span>
+              <div className="flex-1 h-3.5 rounded bg-bg relative overflow-hidden border border-border">
+                <div className="absolute top-0 bottom-0 left-1/2 w-px bg-border" />
+                <div className="absolute top-0 bottom-0" style={{
+                  background: v >= 0 ? '#26d07c' : '#f6465d', width: w + '%',
+                  left: v >= 0 ? '50%' : 'auto', right: v >= 0 ? 'auto' : '50%' }} />
+              </div>
+              <span className={`text-[11px] w-16 text-right stat-num ${cls(v)}`}>
+                {v > 0 ? '+' : ''}{v}%</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 function Lg({ color, name }) {
   return <span className="flex items-center gap-1.5">
