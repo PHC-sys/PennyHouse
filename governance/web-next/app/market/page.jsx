@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api, cls } from '@/components/api';
 import { Spark } from '@/components/Charts';
 import AssetModal from '@/components/AssetModal';
@@ -58,16 +58,25 @@ export default function MarketPage() {
     return vb - va;
   });
 
-  // 스파크라인 배치 로드 (타일 개별 호출 폭탄 방지)
+  // 스파크라인: 화면에 보이는 타일만 배치로 lazy 로드 (점진적 렌더)
   const [sparks, setSparks] = useState({});
-  useEffect(() => {
-    const syms = assets.map((a) => a.symbol);
-    if (!syms.length) return;
-    let on = true;
-    api('/api/sparks', { method: 'POST', body: JSON.stringify({ symbols: syms, days: 14 }) })
-      .then((d) => { if (on) setSparks((p) => ({ ...p, ...d.sparks })); }).catch(() => {});
-    return () => { on = false; };
-  }, [data]);
+  const requestedRef = useRef(new Set());
+  const pendingRef = useRef(new Set());
+  const flushTimer = useRef(null);
+
+  function requestSpark(symbol) {
+    if (requestedRef.current.has(symbol)) return;
+    requestedRef.current.add(symbol);
+    pendingRef.current.add(symbol);
+    clearTimeout(flushTimer.current);
+    flushTimer.current = setTimeout(() => {
+      const syms = [...pendingRef.current];
+      pendingRef.current.clear();
+      if (!syms.length) return;
+      api('/api/sparks', { method: 'POST', body: JSON.stringify({ symbols: syms, days: 14 }) })
+        .then((d) => setSparks((p) => ({ ...p, ...d.sparks }))).catch(() => {});
+    }, 120);  // 잠깐 모아서 한 번에 (스크롤 중 들어온 것들 묶음)
+  }
 
   return (
     <div className="space-y-4">
@@ -106,6 +115,7 @@ export default function MarketPage() {
       <div className="grid gap-3"
         style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))' }}>
         {assets.map((a) => <Tile key={a.symbol} a={a} spark={sparks[a.symbol]}
+          onVisible={() => requestSpark(a.symbol)}
           onClick={() => setSelected(a)}
           fav={!!favs[a.symbol]} onFav={() => toggleFav(a.symbol)} />)}
         {!assets.length && <div className="text-muted">불러오는 중…</div>}
@@ -118,10 +128,20 @@ export default function MarketPage() {
   );
 }
 
-function Tile({ a, spark, onClick, fav, onFav }) {
+function Tile({ a, spark, onVisible, onClick, fav, onFav }) {
   const up = (a.change_24h ?? 0) >= 0;
+  const ref = useRef(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const io = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting) { onVisible(); io.disconnect(); }
+    }, { rootMargin: '200px' });  // 화면 근처 오면 미리 로드
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
   return (
-    <div className="card p-3 hover:shadow-glow hover:border-brand/40 transition cursor-pointer"
+    <div ref={ref} className="card p-3 hover:shadow-glow hover:border-brand/40 transition cursor-pointer"
       onClick={onClick}>
       <div className="flex items-start justify-between">
         <div>
@@ -141,9 +161,10 @@ function Tile({ a, spark, onClick, fav, onFav }) {
           <div className="text-[9px] text-muted">24h</div>
         </div>
       </div>
-      <div className="my-1.5">
-        {spark ? <Spark data={spark} height={44} up={up} />
-          : <div className="h-11 rounded bg-bg/50 animate-pulse" />}
+      <div className="my-1.5 h-11">
+        {spark
+          ? <div className="animate-fadein h-11"><Spark data={spark} height={44} up={up} /></div>
+          : <div className="h-11 rounded bg-bg/40" />}
       </div>
       <div className="flex justify-between text-[10px] text-muted">
         <span title="현재 펀딩 연환산">펀딩 <span className={cls(-a.funding_annual)}>

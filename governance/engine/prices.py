@@ -26,12 +26,19 @@ _CACHE = {}
 _CACHE_TTL = 300  # 5분
 
 
-def _post(payload, timeout=15):
-    try:
-        with _HL_SEM:  # 동시 요청 수 제한 (rate limit 보호)
-            return _HL_SESSION.post(HL_API, json=payload, timeout=timeout).json()
-    except Exception:
-        return None
+def _post(payload, timeout=15, retries=2):
+    """HL POST. 동시성 제한 + 가벼운 재시도(일시적 실패/throttle 대응)."""
+    for attempt in range(retries + 1):
+        try:
+            with _HL_SEM:
+                r = _HL_SESSION.post(HL_API, json=payload, timeout=timeout)
+            if r.status_code == 200:
+                return r.json()
+        except Exception:
+            pass
+        if attempt < retries:
+            time.sleep(0.4 * (attempt + 1))  # 백오프
+    return None
 
 
 def fetch_candles(coin, days=180, interval='1d', use_cache=True, max_points=5000):
@@ -142,14 +149,21 @@ def fetch_funding_history(coin, days=90):
     # 시간당 1건 → days일은 약 days*24/500 페이지 + 여유
     max_pages = max(3, days * 24 // 480 + 5)
     last_ts = None
+    empty_streak = 0
     for _ in range(max_pages):
         batch = _post({'type': 'fundingHistory', 'coin': coin,
                        'startTime': cur_start, 'endTime': end_ms})
         if not batch:
-            break
+            # 일시적 실패일 수 있음 — 한 번 더 시도 후 그래도 비면 종료
+            empty_streak += 1
+            if empty_streak >= 2:
+                break
+            time.sleep(0.3)
+            continue
+        empty_streak = 0
         all_rows += batch
         new_end = batch[-1]['time']
-        if new_end == last_ts or new_end + 1 >= end_ms:  # 더 전진 못하면 종료
+        if new_end == last_ts or new_end + 1 >= end_ms:
             break
         last_ts = new_end
         cur_start = new_end + 1

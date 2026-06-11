@@ -44,3 +44,6 @@ html, body {
 
 .pos { color: #26d07c; }
 .neg { color: #f6465d; }
+
+@keyframes fadein { from { opacity: 0; transform: translateY(2px); } to { opacity: 1; transform: none; } }
+.animate-fadein { animation: fadein 0.35s ease both; }
