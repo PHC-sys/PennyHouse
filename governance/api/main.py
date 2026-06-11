@@ -24,10 +24,11 @@ from pydantic import BaseModel
 from typing import Optional
 
 from governance.engine import (
-    COINS, VOLATILITY, FUND_PROFILES,
+    COINS, VOLATILITY, FUND_PROFILES, SCENARIO_META,
     adaptive_alpha, simulate_votes, votes_to_target,
     fetch_candles, fetch_closes, fetch_current_prices,
-    make_generator, run_backtest, calc_metrics,
+    fetch_funding_history, fetch_current_funding, relative_series,
+    make_generator, make_custom_generator, run_backtest, calc_metrics,
 )
 from governance.engine.voting import apply_ema
 from governance.api import paper
@@ -53,6 +54,11 @@ def get_config():
     }
 
 
+@app.get("/api/scenarios")
+def get_scenarios():
+    return SCENARIO_META
+
+
 @app.get("/api/prices/{coin}")
 def get_prices(coin: str, days: int = 90, interval: str = "1d"):
     coin = coin.upper()
@@ -60,13 +66,41 @@ def get_prices(coin: str, days: int = 90, interval: str = "1d"):
     if df is None:
         raise HTTPException(404, f"{coin} 데이터 없음")
     return {
-        "coin": coin,
+        "coin": coin, "interval": interval,
         "candles": [
             {"time": int(ts.timestamp()), "open": r.open, "high": r.high,
-             "low": r.low, "close": r.close}
+             "low": r.low, "close": r.close, "volume": r.volume}
             for ts, r in df.iterrows()
         ],
     }
+
+
+@app.get("/api/funding/{coin}")
+def get_funding(coin: str, days: int = 90):
+    coin = coin.upper()
+    df = fetch_funding_history(coin, days=days)
+    cur = fetch_current_funding([coin]).get(coin, {})
+    if df is None:
+        raise HTTPException(404, f"{coin} 펀딩 데이터 없음")
+    # 8시간 누적을 일 단위로 리샘플해 연환산(%) 시계열
+    series = [{"time": int(ts.timestamp()),
+               "value": round(float(r.fundingRate) * 24 * 365 * 100, 3)}
+              for ts, r in df.iterrows()]
+    return {"coin": coin, "current": cur, "series": series}
+
+
+@app.get("/api/current_funding")
+def get_current_funding():
+    return fetch_current_funding(COINS)
+
+
+@app.get("/api/relative/{coin_a}/{coin_b}")
+def get_relative(coin_a: str, coin_b: str, days: int = 180, interval: str = "1d"):
+    a, b = coin_a.upper(), coin_b.upper()
+    series = relative_series(a, b, days=days, interval=interval)
+    if not series:
+        raise HTTPException(404, "상대가격 데이터 없음")
+    return {"pair": f"{a}/{b}", "series": series}
 
 
 # ────────────────────────────────────────────────────────────────
@@ -76,7 +110,8 @@ class BacktestReq(BaseModel):
     profile: str = "aggressive"
     days: int = 180
     rebalance_every: int = 7
-    scenarios: list[str] = ["momentum", "contrarian", "random", "perfect"]
+    scenarios: list[str] = ["momentum", "contrarian", "ma_cross", "random", "perfect"]
+    custom_votes: Optional[dict] = None  # {coin:-2~+2} → '내 스탠스' 시나리오 추가
 
 
 @app.post("/api/backtest")
@@ -93,10 +128,14 @@ def post_backtest(req: BacktestReq):
 
     out = {"dates": dates,
            "benchmark": {"label": "Buy & Hold", "cum_return": [round(x, 2) for x in bh_cum]},
-           "scenarios": {}, "metrics": {}}
+           "scenarios": {}, "metrics": {}, "labels": {}}
 
-    for s in req.scenarios:
-        df = run_backtest(s, make_generator(s), returns, req.profile,
+    jobs = [(s, make_generator(s)) for s in req.scenarios]
+    if req.custom_votes:
+        jobs.append(("custom", make_custom_generator(req.custom_votes)))
+
+    for s, gen in jobs:
+        df = run_backtest(s, gen, returns, req.profile,
                           rebalance_every=req.rebalance_every)
         out["scenarios"][s] = {
             "cum_return": [round(x, 2) for x in df["cum_return"]],
@@ -104,6 +143,8 @@ def post_backtest(req: BacktestReq):
             "weights": {c: [round(x, 1) for x in df[f"w_{c}"]] for c in COINS},
         }
         out["metrics"][s] = calc_metrics(df)
+        out["labels"][s] = (SCENARIO_META.get(s, {}).get("label")
+                            or ("내 스탠스" if s == "custom" else s))
 
     out["metrics"]["benchmark"] = {
         "cum_return": round(bh_cum.iloc[-1], 1),

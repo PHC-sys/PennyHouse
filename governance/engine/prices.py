@@ -1,4 +1,4 @@
-"""Hyperliquid 가격/캔들 데이터 수집."""
+"""Hyperliquid 가격/캔들/펀딩 데이터 수집."""
 
 import time
 import requests
@@ -9,14 +9,28 @@ from .profiles import COINS
 
 HL_API = 'https://api.hyperliquid.xyz/info'
 
-# 간단한 인메모리 캐시 (코인+interval+days → (timestamp, df))
+# interval → 밀리초 (페이지네이션 계산용)
+_INTERVAL_MS = {
+    '1m': 60_000, '5m': 300_000, '15m': 900_000, '1h': 3_600_000,
+    '4h': 14_400_000, '1d': 86_400_000, '1w': 604_800_000,
+}
+
+# 간단한 인메모리 캐시
 _CACHE = {}
 _CACHE_TTL = 300  # 5분
 
 
-def fetch_candles(coin, days=180, interval='1d', use_cache=True):
+def _post(payload, timeout=15):
+    try:
+        return requests.post(HL_API, json=payload, timeout=timeout).json()
+    except Exception:
+        return None
+
+
+def fetch_candles(coin, days=180, interval='1d', use_cache=True, max_points=5000):
     """
-    HL candleSnapshot API로 OHLCV 수집.
+    HL candleSnapshot으로 OHLCV 수집. HL은 요청당 약 5000개 제한 →
+    필요 시 자동 페이지네이션으로 더 긴 기간도 수집.
 
     Returns:
         pd.DataFrame[open,high,low,close,volume] (UTC 인덱스), 실패 시 None.
@@ -27,38 +41,44 @@ def fetch_candles(coin, days=180, interval='1d', use_cache=True):
         if time.time() - ts < _CACHE_TTL:
             return df.copy()
 
+    step = _INTERVAL_MS.get(interval, 86_400_000)
     end_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
-    start_ms = end_ms - days * 86400 * 1000
-    try:
-        res = requests.post(HL_API, json={
+    start_ms = end_ms - days * 86_400_000
+
+    all_rows = []
+    cur_end = end_ms
+    # 역방향으로 페이지네이션 (오래된 쪽으로)
+    for _ in range(20):  # 안전 상한 (최대 20페이지)
+        batch = _post({
             'type': 'candleSnapshot',
             'req': {'coin': coin, 'interval': interval,
-                    'startTime': start_ms, 'endTime': end_ms}
-        }, timeout=15)
-        rows = res.json()
-    except Exception:
-        return None
-    if not rows:
+                    'startTime': start_ms, 'endTime': cur_end},
+        })
+        if not batch:
+            break
+        all_rows = batch + all_rows  # 앞에 붙임
+        if len(batch) < max_points or batch[0]['t'] <= start_ms:
+            break
+        cur_end = batch[0]['t'] - 1
+        if cur_end <= start_ms:
+            break
+
+    if not all_rows:
         return None
 
-    df = pd.DataFrame(rows)
+    df = pd.DataFrame(all_rows)
     df['time'] = pd.to_datetime(df['t'], unit='ms', utc=True)
     df = df.rename(columns={'o': 'open', 'h': 'high', 'l': 'low',
                             'c': 'close', 'v': 'volume'})
-    df = df[['time', 'open', 'high', 'low', 'close', 'volume']].set_index('time')
-    df = df.astype(float).sort_index()
+    df = df[['time', 'open', 'high', 'low', 'close', 'volume']]
+    df = df.drop_duplicates('time').set_index('time').astype(float).sort_index()
 
     _CACHE[key] = (time.time(), df.copy())
     return df
 
 
 def fetch_closes(coins=None, days=180, interval='1d'):
-    """
-    여러 코인의 종가를 공통 날짜로 정렬한 DataFrame + 일간수익률 반환.
-
-    Returns:
-        (closes_df, returns_df). 데이터 없으면 (None, None).
-    """
+    """여러 코인 종가 정렬 + 일간수익률. → (closes_df, returns_df)."""
     coins = coins or COINS
     data = {}
     for c in coins:
@@ -72,17 +92,100 @@ def fetch_closes(coins=None, days=180, interval='1d'):
     return closes, returns
 
 
+_LIVE_CACHE = {}      # key → (ts, value)
+_LIVE_TTL = 20        # 실시간 데이터 20초 캐시 (폴링 부하 완화)
+
+
+def _live_cached(key, ttl, fn):
+    now = time.time()
+    if key in _LIVE_CACHE:
+        ts, val = _LIVE_CACHE[key]
+        if now - ts < ttl:
+            return val
+    val = fn()
+    _LIVE_CACHE[key] = (now, val)
+    return val
+
+
 def fetch_current_prices(coins=None):
+    """HL allMids로 현재가 (20초 캐시). → {coin: float}."""
+    coins = coins or COINS
+
+    def _f():
+        mids = _post({'type': 'allMids'})
+        return {c: float(mids[c]) for c in coins if c in mids} if mids else {}
+
+    return _live_cached(('mids', tuple(coins)), _LIVE_TTL, _f)
+
+
+def fetch_funding_history(coin, days=90):
     """
-    HL allMids로 현재가 조회.
+    HL fundingHistory로 펀딩비 시계열 수집 (8시간마다 1건, 요청당 500 제한).
 
     Returns:
-        {coin: float} 현재가. 실패 시 {}.
+        pd.DataFrame[fundingRate] (UTC 인덱스), 실패 시 None.
+        fundingRate = 1시간 지급요율. 연환산 = ×24×365.
+    """
+    end_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+    start_ms = end_ms - days * 86_400_000
+    all_rows = []
+    cur_end = end_ms
+    for _ in range(10):
+        batch = _post({'type': 'fundingHistory', 'coin': coin,
+                       'startTime': start_ms, 'endTime': cur_end})
+        if not batch:
+            break
+        all_rows = batch + all_rows
+        if len(batch) < 500 or batch[0]['time'] <= start_ms:
+            break
+        cur_end = batch[0]['time'] - 1
+    if not all_rows:
+        return None
+    df = pd.DataFrame(all_rows)
+    df['time'] = pd.to_datetime(df['time'], unit='ms', utc=True)
+    df['fundingRate'] = df['fundingRate'].astype(float)
+    return df.drop_duplicates('time')[['time', 'fundingRate']].set_index('time').sort_index()
+
+
+def fetch_current_funding(coins=None):
+    """
+    현재 펀딩레이트 조회 (metaAndAssetCtxs).
+
+    Returns:
+        {coin: {'funding_1h': float, 'annual_pct': float}}.
     """
     coins = coins or COINS
-    try:
-        res = requests.post(HL_API, json={'type': 'allMids'}, timeout=15)
-        mids = res.json()
-    except Exception:
-        return {}
-    return {c: float(mids[c]) for c in coins if c in mids}
+
+    def _f():
+        data = _post({'type': 'metaAndAssetCtxs'})
+        if not data or len(data) < 2:
+            return {}
+        universe = data[0]['universe']
+        ctxs = data[1]
+        name_to_idx = {u['name']: i for i, u in enumerate(universe)}
+        out = {}
+        for c in coins:
+            i = name_to_idx.get(c)
+            if i is None or i >= len(ctxs):
+                continue
+            fr = float(ctxs[i].get('funding', 0))  # 1시간 요율
+            out[c] = {'funding_1h': fr, 'annual_pct': round(fr * 24 * 365 * 100, 2)}
+        return out
+
+    return _live_cached(('funding', tuple(coins)), _LIVE_TTL, _f)
+
+
+def relative_series(coin_a, coin_b, days=180, interval='1d'):
+    """
+    두 자산 상대가격(A/B) 시계열.
+
+    Returns:
+        list[{'time': int(sec), 'value': float}], 실패 시 [].
+    """
+    da = fetch_candles(coin_a, days=days, interval=interval)
+    db = fetch_candles(coin_b, days=days, interval=interval)
+    if da is None or db is None:
+        return []
+    ratio = (da['close'] / db['close']).dropna()
+    return [{'time': int(ts.timestamp()), 'value': round(float(v), 6)}
+            for ts, v in ratio.items()]

@@ -10,6 +10,7 @@ import time
 from governance.engine import (
     COINS, FUND_PROFILES, adaptive_alpha,
     simulate_votes, votes_to_target, fetch_current_prices,
+    fetch_current_funding,
 )
 from governance.engine.voting import apply_ema
 
@@ -104,10 +105,25 @@ def get_state():
             "ret_pct": round((eq / _INITIAL - 1) * 100, 2),
         })
     participants.sort(key=lambda x: x["paper_value"], reverse=True)
+
+    # 펀딩 캐리 (연환산 %): 롱은 펀딩 지불(-), 숏은 수취(+)
+    lev = FUND_PROFILES[_state["profile"]]["FUND_LEVERAGE"]
+    cf = fetch_current_funding(COINS)
+    carry_annual = 0.0
+    carry_by_coin = {}
+    for c in COINS:
+        ann = cf.get(c, {}).get("annual_pct", 0)
+        contrib = -(_state["weights"][c] / 100) * lev * ann  # 롱(+w)→비용
+        carry_by_coin[c] = round(contrib, 2)
+        carry_annual += contrib
+
     return {
         "profile": _state["profile"],
         "fund_equity": round(eq, 2),
         "fund_return_pct": round((eq / _INITIAL - 1) * 100, 2),
+        "funding_carry_annual_pct": round(carry_annual, 2),
+        "funding_carry_by_coin": carry_by_coin,
+        "funding_rates": {c: cf.get(c, {}).get("annual_pct", 0) for c in COINS},
         "weights": {c: round(_state["weights"][c], 1) for c in COINS},
         "target": (None if _state["last_target"] is None
                    else {c: round(_state["last_target"][c], 1) for c in COINS}),
