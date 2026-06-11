@@ -16,13 +16,22 @@ const dedupe = (arr) => {
   return out;
 };
 
+// 리사이즈 옵저버 — DOM 노드를 캡처해서 사용 (언마운트 후 null 참조 방지)
+function attachResize(el, chart) {
+  const ro = new ResizeObserver(() => {
+    if (el && el.isConnected) chart.applyOptions({ width: el.clientWidth });
+  });
+  ro.observe(el);
+  return ro;
+}
+
 // 여러 라인 (백테스트 수익률) — 변경 시 통째로 재생성 (저빈도라 안전)
 export function MultiLine({ lines, height = 300, logScale = false }) {
   const elRef = useRef(null);
   useEffect(() => {
-    if (!elRef.current) return;
-    const chart = createChart(elRef.current, { ...BASE, height,
-      width: elRef.current.clientWidth,
+    const el = elRef.current;
+    if (!el) return;
+    const chart = createChart(el, { ...BASE, height, width: el.clientWidth,
       rightPriceScale: { mode: logScale ? 1 : 0, borderColor: '#1f2937' } });
     (lines || []).forEach((ln) => {
       const s = chart.addLineSeries({ color: ln.color, lineWidth: ln.width || 2,
@@ -31,9 +40,7 @@ export function MultiLine({ lines, height = 300, logScale = false }) {
       s.setData(dedupe(ln.data));
     });
     chart.timeScale().fitContent();
-    const ro = new ResizeObserver(() =>
-      chart.applyOptions({ width: elRef.current.clientWidth }));
-    ro.observe(elRef.current);
+    const ro = attachResize(el, chart);
     return () => { ro.disconnect(); chart.remove(); };
   }, [lines, logScale, height]);
   return <div ref={elRef} style={{ height }} />;
@@ -45,15 +52,14 @@ export function Candles({ data, height = 360 }) {
   const chartRef = useRef(null);
   const sRef = useRef(null);
   useEffect(() => {
-    if (!elRef.current) return;
-    const chart = createChart(elRef.current, { ...BASE, height, width: elRef.current.clientWidth });
+    const el = elRef.current;
+    if (!el) return;
+    const chart = createChart(el, { ...BASE, height, width: el.clientWidth });
     chartRef.current = chart;
     sRef.current = chart.addCandlestickSeries({
       upColor: '#26d07c', downColor: '#f6465d', borderVisible: false,
       wickUpColor: '#26d07c', wickDownColor: '#f6465d' });
-    const ro = new ResizeObserver(() =>
-      chart.applyOptions({ width: elRef.current.clientWidth }));
-    ro.observe(elRef.current);
+    const ro = attachResize(el, chart);
     return () => { ro.disconnect(); chart.remove(); chartRef.current = null; sRef.current = null; };
   }, [height]);
   useEffect(() => {
@@ -71,29 +77,27 @@ export function Spark({ data, height = 48, up = true }) {
   const chartRef = useRef(null);
   const sRef = useRef(null);
   useEffect(() => {
-    if (!elRef.current) return;
+    const el = elRef.current;
+    if (!el) return;
     const color = up ? '#26d07c' : '#f6465d';
-    const chart = createChart(elRef.current, {
+    const chart = createChart(el, {
       layout: { background: { color: 'transparent' }, textColor: 'transparent' },
       grid: { vertLines: { visible: false }, horzLines: { visible: false } },
       rightPriceScale: { visible: false }, leftPriceScale: { visible: false },
       timeScale: { visible: false }, crosshair: { mode: 0 },
       handleScroll: false, handleScale: false,
-      height, width: elRef.current.clientWidth,
+      height, width: el.clientWidth,
     });
     chartRef.current = chart;
     sRef.current = chart.addAreaSeries({ lineColor: color, topColor: color + '40',
       bottomColor: color + '00', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: false });
-    const ro = new ResizeObserver(() =>
-      chart.applyOptions({ width: elRef.current.clientWidth }));
-    ro.observe(elRef.current);
+    const ro = attachResize(el, chart);
     return () => { ro.disconnect(); chart.remove(); chartRef.current = null; sRef.current = null; };
   }, [height, up]);
   useEffect(() => {
     if (sRef.current && data && data.length) {
-      const seen = new Set(); const clean = [];
-      for (const p of data) { if (seen.has(p.time)) continue; seen.add(p.time); clean.push(p); }
-      sRef.current.setData(clean); chartRef.current?.timeScale().fitContent();
+      sRef.current.setData(dedupe(data));
+      chartRef.current?.timeScale().fitContent();
     }
   }, [data]);
   return <div ref={elRef} style={{ height }} />;
@@ -105,16 +109,15 @@ export function Line({ data, height = 200, color = '#5b8def', area = false }) {
   const chartRef = useRef(null);
   const sRef = useRef(null);
   useEffect(() => {
-    if (!elRef.current) return;
-    const chart = createChart(elRef.current, { ...BASE, height, width: elRef.current.clientWidth });
+    const el = elRef.current;
+    if (!el) return;
+    const chart = createChart(el, { ...BASE, height, width: el.clientWidth });
     chartRef.current = chart;
     sRef.current = area
       ? chart.addAreaSeries({ lineColor: color, topColor: color + '55',
           bottomColor: color + '05', lineWidth: 2 })
       : chart.addLineSeries({ color, lineWidth: 2 });
-    const ro = new ResizeObserver(() =>
-      chart.applyOptions({ width: elRef.current.clientWidth }));
-    ro.observe(elRef.current);
+    const ro = attachResize(el, chart);
     return () => { ro.disconnect(); chart.remove(); chartRef.current = null; sRef.current = null; };
   }, [height, color, area]);
   useEffect(() => {
