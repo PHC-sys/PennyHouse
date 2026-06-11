@@ -16,8 +16,12 @@ governance/
     scenarios.py   백테스트 투표 시나리오 (모멘텀/역추세/이평/랜덤/완벽/커스텀)
     backtest.py    run_backtest, calc_metrics (자산별 기여도 포함)
   api/           ← FastAPI 백엔드
-    main.py        엔드포인트 (config/prices/funding/relative/assets/sparks/backtest/paper)
-    paper.py       페이퍼 상태 (인메모리: NAV·자산별손익·평단·청산가·펀딩캐리)
+    main.py        엔드포인트 (config/prices/funding/relative/assets/sparks/backtest/funds/paper)
+    live.py        HL WebSocket 라이브 가격 워커(메모리) + /ws/market 푸시
+    store.py       SQLite 영속(funds/votes/nav_history/allowlist) — DB 자동생성
+    funds.py       펀드별 운용 엔진(멀티펀드, 유니버스/영속/라이브평가)
+    paper.py       (구) 단일 페이퍼 상태 — 3-4에서 funds로 이전 후 제거 예정
+  governance.db    SQLite (gitignore. 첫 실행 시 init_db로 자동 생성 + Demo 펀드 시드)
   web/           ← 구버전 정적 프론트 (대체됨, 보존)
   web-next/      ← ★ Next.js14 + Tailwind 프리미엄 프론트 (현행)
     app/           page(백테스트) · paper · market

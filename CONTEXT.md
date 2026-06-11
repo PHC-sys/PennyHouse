@@ -198,12 +198,47 @@ tests/     test_engine.py (assert 검증 통과)
 ✅ 1차: 펀딩캐리 표기 정직화 + 1x 프로파일 + 자산별손익 + 평단/청산가
 ✅ 2차: HL 전 자산(265개 크립토+TradFi+Pre-IPO) + 변동성 자동 + 마켓탭
        + 상세모달 + ⌘K팔레트 + 즐겨찾기 + 거래량 + 로딩최적화(lazy/배치)
-⬜ 2.5차: 라이브 데이터 (HL WebSocket 워커→메모리→/ws 푸시) ← 현재
-        · 가격/펀딩 틱 갱신(플래시), 캔들 마지막봉만 update (라이브+가벼움)
-⬜ 3차: SQLite 멀티펀드 + 펀드 개설 폼(예치금/한도/Public·Private/허용지갑/유니버스)
+✅ 2.5차: 라이브 데이터 (HL WebSocket 워커→메모리→/ws 푸시)
+        · 가격/펀딩 틱 갱신(플래시), 캔들 마지막봉 update + 봉 롤오버
+        · live.py(워커), useLive.js(훅), 동적소수점 smartNum
+🔄 3차: SQLite 멀티펀드 (진행 중)
+        ✅ 3-1 store.py(SQLite) + 펀드 CRUD API (/api/funds)
+        ✅ 3-2 funds.py 펀드별 운용 엔진 (유니버스/영속/라이브평가)
+        ⬜ 3-3 프론트 펀드 목록 + 개설 폼 (탭 전체/Demo/실제, ⌘K 유니버스) ← 다음
+        ⬜ 3-4 프론트 펀드 상세 (페이퍼 화면을 펀드별로)
 ⬜ 4차: 리플레이 모드 (게임형 과거 트레이딩)
 ⬜ 5차: 지갑 서명 인증 (Private 펀드)
 ```
+
+#### ★ 핵심 설계 통찰 — DB(페이퍼) vs 블록체인(실제)
+```
+SQLite/계산은 "지갑 없는 페이퍼/테스트"를 위한 것.
+실제 펀드(EVM)에서는 계산이 아니라 '펀드 지갑 포지션을 읽음':
+  포지션/평단(entryPx)/손익(unrealizedPnl)/청산가(liquidationPx)/펀딩 = HL API 읽기
+→ 실제는 지갑이 '진실의 원천' → 서버 다운/재시작과 무관 (자산 온체인).
+
+[페이퍼(지금)]  지갑 없음 → 서버가 가상 계산. 런타임 상태(equity/평단/손익)는
+               메모리라 재시작 시 리셋(투표/메타/NAV는 SQLite라 생존).
+               페이퍼라 리셋 무방 — 영속화 공들일 필요 낮음.
+[실제(5차+)]   지갑이 DB. 서버는 읽어서 표시만. "서버 죽으면?" 질문 자체 소멸.
+둘은 공존: 페이퍼/데모(DB) = 체험·테스트, 실제 펀드(블록체인) = 운용.
+같은 엔진(votes_to_target) 재사용. DB는 GitHub에 안 올림(*.db gitignore,
+코드가 init_db로 자동 생성 + Demo 펀드 시드).
+```
+
+#### 멀티펀드 백엔드 구조 (3-1·3-2)
+```
+api/store.py  SQLite: funds/votes/nav_history/allowlist (영속)
+api/funds.py  fund_id별 런타임 상태(메모리) + 펀드 유니버스 운용
+              · mark-to-market은 live 워커 메모리에서 (REST X)
+              · 메타/펀딩/레버리지는 fetch_universe 레지스트리(HIP-3 포함)
+펀드 필드: kind(demo|real), visibility(public|private), creator(닉네임=localStorage),
+          universe[], profile/leverage, initial_deposit, max_deposit, allowlist(저장만)
+API: POST/GET/DELETE /api/funds, GET /api/funds/{id},
+     /api/funds/{id}/vote · /state · /reset
+목록 정렬: 내펀드(creator/투표) → demo → 최신. 첫실행 Demo펀드 자동시드.
+멀티유저 식별: 인증(5차) 전까지 localStorage 닉네임/clientId 기반.
+※ 기존 /api/paper/* (단일 paper.py)는 3-4에서 펀드별로 이전 후 제거 예정.
 
 #### web-next 주요 컴포넌트 (2026-06-11)
 ```

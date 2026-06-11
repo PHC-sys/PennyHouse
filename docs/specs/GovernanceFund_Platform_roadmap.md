@@ -163,6 +163,20 @@ position_notional = |수량| × mark_price = (비중/100) × equity × leverage
 - 영속 데이터(펀드 상태 등) = **SQLite** (3차에서 도입)
 - Redis 등은 실제 트래픽 발생 시 검토 (현 단계 과함)
 
+### ★ 페이퍼(DB) vs 실제 펀드(블록체인) — 데이터 원천
+```
+[페이퍼/테스트] 지갑 없음 → 서버가 가상 계산 → SQLite 영속
+  · 런타임(equity/평단/손익)은 메모리 → 재시작 시 리셋(투표/NAV는 생존)
+  · 페이퍼라 리셋 무방. 영속화 공들일 필요 낮음.
+[실제 펀드(5차+)] 펀드 = HL 지갑 1개. 서버는 계산 X, '읽기':
+  포지션·평균단가(entryPx)·미실현손익(unrealizedPnl)·청산가(liquidationPx)
+  ·펀딩 누적 = HL clearinghouseState 등에서 Read
+  → 지갑이 '진실의 원천' → 서버 다운/재시작과 무관(자산 온체인)
+  → "서버 죽으면 데이터 소멸?" 질문 자체가 사라짐
+공존: 페이퍼/데모(DB)=체험·테스트, 실제 펀드(블록체인)=운용.
+      같은 엔진(votes_to_target) 재사용. DB는 GitHub 미포함(코드가 자동 생성).
+```
+
 ### HL WebSocket
 - 엔드포인트: `wss://api.hyperliquid.xyz/ws` (무료, 공개데이터 무인증)
 - 구독: `allMids`(전 자산 mid), `candle`(coin+interval), `activeAssetCtx`(펀딩 등)
