@@ -19,7 +19,7 @@ from .scenarios import (
     make_generator, make_custom_generator,
 )
 from .backtest import run_backtest, calc_metrics
-from .assets import fetch_universe, compute_volatility, asset_sparkline
+from .assets import fetch_universe, compute_volatility, asset_sparkline, batch_sparklines
 
 __all__ = [
     'VOLATILITY', 'COINS', 'FUND_PROFILES',
@@ -33,5 +33,5 @@ __all__ = [
     'gen_ma_cross', 'gen_always_long',
     'make_generator', 'make_custom_generator',
     'run_backtest', 'calc_metrics',
-    'fetch_universe', 'compute_volatility', 'asset_sparkline',
+    'fetch_universe', 'compute_volatility', 'asset_sparkline', 'batch_sparklines',
 ]

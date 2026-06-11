@@ -6,8 +6,11 @@ const BASE = {
   layout: { background: { color: 'transparent' }, textColor: '#7d8a9c', fontFamily: 'inherit' },
   grid: { vertLines: { color: '#141c28' }, horzLines: { color: '#141c28' } },
   rightPriceScale: { borderColor: '#1f2937' },
-  timeScale: { borderColor: '#1f2937' },
+  timeScale: { borderColor: '#1f2937', rightOffset: 6, minBarSpacing: 0.5 },
   crosshair: { mode: CrosshairMode.Normal },
+  handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true },
+  handleScale: { mouseWheel: true, pinch: true,
+    axisPressedMouseMove: { time: true, price: true } },
 };
 
 const dedupe = (arr) => {

@@ -11,6 +11,7 @@ import time
 import requests
 import numpy as np
 
+from concurrent.futures import ThreadPoolExecutor
 from .prices import HL_API, _post, fetch_candles
 
 # 다룰 dex 소스 (메인=None) → 대분류
@@ -113,3 +114,35 @@ def asset_sparkline(symbol, days=30):
         return []
     return [{'time': int(ts.timestamp()), 'value': round(float(v), 4)}
             for ts, v in df['close'].items()]
+
+
+_SPARK_CACHE = {}
+_SPARK_TTL = 300
+
+
+def batch_sparklines(symbols, days=14):
+    """
+    여러 심볼 스파크라인을 제한된 동시성으로 한 번에 수집 (마켓 타일용).
+    개별 호출 폭탄 방지 → 로딩 안정화.
+
+    Returns: {symbol: [{time, value}, ...]}
+    """
+    out, todo = {}, []
+    now = time.time()
+    for s in symbols:
+        c = _SPARK_CACHE.get((s, days))
+        if c and now - c[0] < _SPARK_TTL:
+            out[s] = c[1]
+        else:
+            todo.append(s)
+
+    def _one(s):
+        return s, asset_sparkline(s, days=days)
+
+    if todo:
+        # _post 자체가 세마포어(8)로 제한되므로 워커는 넉넉히
+        with ThreadPoolExecutor(max_workers=12) as ex:
+            for s, series in ex.map(_one, todo):
+                _SPARK_CACHE[(s, days)] = (now, series)
+                out[s] = series
+    return out

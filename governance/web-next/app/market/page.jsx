@@ -58,6 +58,17 @@ export default function MarketPage() {
     return vb - va;
   });
 
+  // 스파크라인 배치 로드 (타일 개별 호출 폭탄 방지)
+  const [sparks, setSparks] = useState({});
+  useEffect(() => {
+    const syms = assets.map((a) => a.symbol);
+    if (!syms.length) return;
+    let on = true;
+    api('/api/sparks', { method: 'POST', body: JSON.stringify({ symbols: syms, days: 14 }) })
+      .then((d) => { if (on) setSparks((p) => ({ ...p, ...d.sparks })); }).catch(() => {});
+    return () => { on = false; };
+  }, [data]);
+
   return (
     <div className="space-y-4">
       {/* 헤더/필터 */}
@@ -94,7 +105,8 @@ export default function MarketPage() {
       {/* 타일 그리드 */}
       <div className="grid gap-3"
         style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))' }}>
-        {assets.map((a) => <Tile key={a.symbol} a={a} onClick={() => setSelected(a)}
+        {assets.map((a) => <Tile key={a.symbol} a={a} spark={sparks[a.symbol]}
+          onClick={() => setSelected(a)}
           fav={!!favs[a.symbol]} onFav={() => toggleFav(a.symbol)} />)}
         {!assets.length && <div className="text-muted">불러오는 중…</div>}
       </div>
@@ -106,13 +118,7 @@ export default function MarketPage() {
   );
 }
 
-function Tile({ a, onClick, fav, onFav }) {
-  const [spark, setSpark] = useState([]);
-  useEffect(() => {
-    let on = true;
-    api(`/api/spark/${a.symbol}?days=30`).then((d) => on && setSpark(d.series)).catch(() => {});
-    return () => { on = false; };
-  }, [a.symbol]);
+function Tile({ a, spark, onClick, fav, onFav }) {
   const up = (a.change_24h ?? 0) >= 0;
   return (
     <div className="card p-3 hover:shadow-glow hover:border-brand/40 transition cursor-pointer"
@@ -135,7 +141,10 @@ function Tile({ a, onClick, fav, onFav }) {
           <div className="text-[9px] text-muted">24h</div>
         </div>
       </div>
-      <div className="my-1.5"><Spark data={spark} height={44} up={up} /></div>
+      <div className="my-1.5">
+        {spark ? <Spark data={spark} height={44} up={up} />
+          : <div className="h-11 rounded bg-bg/50 animate-pulse" />}
+      </div>
       <div className="flex justify-between text-[10px] text-muted">
         <span title="현재 펀딩 연환산">펀딩 <span className={cls(-a.funding_annual)}>
           {a.funding_annual}%</span></span>

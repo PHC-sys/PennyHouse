@@ -29,7 +29,7 @@ from governance.engine import (
     fetch_candles, fetch_closes, fetch_current_prices,
     fetch_funding_history, fetch_current_funding, relative_series,
     make_generator, make_custom_generator, run_backtest, calc_metrics,
-    fetch_universe, compute_volatility, asset_sparkline,
+    fetch_universe, compute_volatility, asset_sparkline, batch_sparklines,
 )
 from governance.engine.voting import apply_ema
 from governance.api import paper
@@ -100,6 +100,17 @@ def get_spark(symbol: str, days: int = 30):
     """미니 차트용 종가 스파크라인 (HIP-3 prefix 'xyz:NVDA' 지원)."""
     return {"symbol": symbol, "series": asset_sparkline(symbol, days=days),
             "volatility": compute_volatility(symbol)}
+
+
+class SparkBatchReq(BaseModel):
+    symbols: list[str]
+    days: int = 14
+
+
+@app.post("/api/sparks")
+def post_sparks(req: SparkBatchReq):
+    """여러 심볼 스파크라인 일괄 (마켓 타일 로딩 안정화)."""
+    return {"sparks": batch_sparklines(req.symbols[:150], days=req.days)}
 
 
 @app.get("/api/prices/{coin:path}")

@@ -23,10 +23,10 @@ export default function AssetModal({ asset, onClose }) {
   const sym = asset.symbol;
 
   useEffect(() => {
-    const onKey = (e) => e.key === 'Escape' && onClose();
+    const onKey = (e) => { if (e.key === 'Escape' && !pickerOpen) onClose(); };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  }, [onClose, pickerOpen]);
 
   useEffect(() => {
     api(`/api/prices/${sym}?days=${days}&interval=${interval}`)

@@ -1,13 +1,19 @@
 """Hyperliquid 가격/캔들/펀딩 데이터 수집."""
 
 import time
+import threading
 import requests
 import pandas as pd
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 
 from .profiles import COINS
 
 HL_API = 'https://api.hyperliquid.xyz/info'
+
+# HL API rate limit 보호: 동시 요청 수 제한
+_HL_SEM = threading.Semaphore(8)
+_HL_SESSION = requests.Session()
 
 # interval → 밀리초 (페이지네이션 계산용)
 _INTERVAL_MS = {
@@ -22,7 +28,8 @@ _CACHE_TTL = 300  # 5분
 
 def _post(payload, timeout=15):
     try:
-        return requests.post(HL_API, json=payload, timeout=timeout).json()
+        with _HL_SEM:  # 동시 요청 수 제한 (rate limit 보호)
+            return _HL_SESSION.post(HL_API, json=payload, timeout=timeout).json()
     except Exception:
         return None
 
