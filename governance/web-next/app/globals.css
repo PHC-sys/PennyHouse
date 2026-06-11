@@ -1,0 +1,46 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root { color-scheme: dark; }
+
+html, body {
+  background: radial-gradient(1200px 600px at 70% -10%, #16203400, #0a0e14),
+              #0a0e14;
+  color: #e7edf5;
+}
+
+::-webkit-scrollbar { width: 9px; height: 9px; }
+::-webkit-scrollbar-thumb { background: #243044; border-radius: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+
+@layer components {
+  .card {
+    @apply bg-card border border-border rounded-2xl p-5 shadow-card;
+  }
+  .btn {
+    @apply px-4 py-2 rounded-xl text-sm font-semibold transition;
+  }
+  .btn-primary {
+    @apply btn bg-brand text-bg hover:brightness-110 active:brightness-95;
+  }
+  .btn-ghost {
+    @apply btn border border-border text-muted hover:text-fg hover:border-brand/50;
+  }
+  .input {
+    @apply bg-bg border border-border rounded-xl px-3 py-2 text-sm
+           focus:outline-none focus:border-brand/70 transition;
+  }
+  .chip {
+    @apply px-3 py-1.5 rounded-lg text-xs border border-border text-muted
+           cursor-pointer transition hover:text-fg;
+  }
+  .chip-active {
+    @apply bg-brand text-bg border-brand;
+  }
+  .label { @apply text-xs text-muted mb-1; }
+  .stat-num { @apply font-mono tabular-nums; }
+}
+
+.pos { color: #26d07c; }
+.neg { color: #f6465d; }
