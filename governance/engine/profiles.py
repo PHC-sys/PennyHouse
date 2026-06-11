@@ -17,6 +17,7 @@ COINS = list(VOLATILITY.keys())
 FUND_PROFILES = {
     'aggressive':   {'T_CONVERGE': 7,  'MAX_WEIGHT': 80, 'FUND_LEVERAGE': 5, 'color': '#e74c3c'},
     'conservative': {'T_CONVERGE': 21, 'MAX_WEIGHT': 60, 'FUND_LEVERAGE': 2, 'color': '#2ecc71'},
+    'spot':         {'T_CONVERGE': 14, 'MAX_WEIGHT': 70, 'FUND_LEVERAGE': 1, 'color': '#5b8def'},
 }
 
 # 백테스트 수수료 (HL Perp maker 왕복)

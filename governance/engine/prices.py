@@ -175,6 +175,42 @@ def fetch_current_funding(coins=None):
     return _live_cached(('funding', tuple(coins)), _LIVE_TTL, _f)
 
 
+def fetch_asset_meta(coins=None):
+    """
+    HL meta로 자산별 최대 레버리지 조회 → 유지증거금률(mmr) 산출.
+    mmr ≈ 1 / (2 × maxLeverage)  (HL 근사).
+
+    Returns:
+        {coin: {'max_leverage': int, 'mmr': float}}.
+    """
+    data = _post({'type': 'meta'})
+    if not data or 'universe' not in data:
+        return {}
+    out = {}
+    want = set(coins) if coins else None
+    for u in data['universe']:
+        name = u.get('name')
+        if want and name not in want:
+            continue
+        mx = int(u.get('maxLeverage', 1) or 1)
+        out[name] = {'max_leverage': mx, 'mmr': round(1 / (2 * mx), 5)}
+    return out
+
+
+def liquidation_price(entry, leverage, side, mmr):
+    """
+    HL isolated 청산가 근사.
+      롱: liq = entry × (1 − 1/lev + mmr)
+      숏: liq = entry × (1 + 1/lev − mmr)
+    side: 'long' | 'short'. entry/leverage>0 가정.
+    """
+    if entry <= 0 or leverage <= 0:
+        return None
+    if side == 'long':
+        return entry * (1 - 1 / leverage + mmr)
+    return entry * (1 + 1 / leverage - mmr)
+
+
 def relative_series(coin_a, coin_b, days=180, interval='1d'):
     """
     두 자산 상대가격(A/B) 시계열.

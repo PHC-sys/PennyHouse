@@ -141,6 +141,7 @@ def post_backtest(req: BacktestReq):
             "cum_return": [round(x, 2) for x in df["cum_return"]],
             "drawdown": [round(x, 2) for x in df["drawdown"]],
             "weights": {c: [round(x, 1) for x in df[f"w_{c}"]] for c in COINS},
+            "asset_contribution": df.attrs.get("asset_contribution", {}),
         }
         out["metrics"][s] = calc_metrics(df)
         out["labels"][s] = (SCENARIO_META.get(s, {}).get("label")

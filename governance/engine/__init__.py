@@ -10,6 +10,7 @@ from .voting import simulate_votes, votes_to_target
 from .prices import (
     fetch_candles, fetch_closes, fetch_current_prices,
     fetch_funding_history, fetch_current_funding, relative_series,
+    fetch_asset_meta, liquidation_price,
 )
 from .scenarios import (
     score_to_vote, SCENARIO_META,
@@ -25,6 +26,7 @@ __all__ = [
     'simulate_votes', 'votes_to_target',
     'fetch_candles', 'fetch_closes', 'fetch_current_prices',
     'fetch_funding_history', 'fetch_current_funding', 'relative_series',
+    'fetch_asset_meta', 'liquidation_price',
     'score_to_vote', 'SCENARIO_META',
     'gen_momentum', 'gen_contrarian', 'gen_random', 'gen_perfect',
     'gen_ma_cross', 'gen_always_long',

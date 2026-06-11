@@ -43,6 +43,7 @@ def run_backtest(scenario_name, vote_generator, returns_df, profile,
 
     equity = initial_tvl
     weights = {c: 100.0 / len(coins) for c in coins}  # 초기 균등 롱
+    asset_pnl = {c: 0.0 for c in coins}               # 코인별 누적 손익($)
     history = []
     liquidated = False
 
@@ -59,16 +60,20 @@ def run_backtest(scenario_name, vote_generator, returns_df, profile,
                 equity -= turnover * equity * lev * REBALANCE_FEE
                 weights = new_w
 
-        # 일간 PnL (부호가 롱/숏 방향 자동 처리)
-        daily_pnl = sum((weights[c] / 100) * equity * lev * returns_df.loc[date, c]
-                        for c in coins)
-        equity += daily_pnl
+        # 일간 PnL (코인별로 분리 적립 → 리밸런싱 구간별 합산 정합)
+        day_total = 0.0
+        for c in coins:
+            pnl = (weights[c] / 100) * equity * lev * returns_df.loc[date, c]
+            asset_pnl[c] += pnl
+            day_total += pnl
+        equity += day_total
 
         if equity < initial_tvl * 0.1 and not liquidated:
             liquidated = True
 
         row = {'equity': max(equity, 0)}
         row.update({f'w_{c}': weights[c] for c in coins})
+        row.update({f'pnl_{c}': asset_pnl[c] for c in coins})
         history.append(row)
 
     df = pd.DataFrame(history, index=returns_df.index)
@@ -77,6 +82,10 @@ def run_backtest(scenario_name, vote_generator, returns_df, profile,
     df['drawdown'] = (df['equity'] / df['equity'].cummax() - 1) * 100
     df['scenario'] = scenario_name
     df['liquidated'] = liquidated
+    # 코인별 누적 기여도(%) = 코인 누적손익 / 초기자본
+    df.attrs['asset_contribution'] = {
+        c: round(asset_pnl[c] / initial_tvl * 100, 2) for c in coins
+    }
     return df
 
 
