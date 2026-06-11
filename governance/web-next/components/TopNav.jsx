@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 const TABS = [
   { href: '/', label: '과거 백테스트', icon: '📈' },
   { href: '/paper', label: '라이브 페이퍼 트레이딩', icon: '🗳️' },
+  { href: '/market', label: '마켓', icon: '🌐' },
 ];
 
 export default function TopNav() {

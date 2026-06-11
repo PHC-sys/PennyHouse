@@ -65,6 +65,40 @@ export function Candles({ data, height = 360 }) {
   return <div ref={elRef} style={{ height }} />;
 }
 
+// 스파크라인 (마켓 타일용 — 축/그리드 없음, 색은 등락 따라)
+export function Spark({ data, height = 48, up = true }) {
+  const elRef = useRef(null);
+  const chartRef = useRef(null);
+  const sRef = useRef(null);
+  useEffect(() => {
+    if (!elRef.current) return;
+    const color = up ? '#26d07c' : '#f6465d';
+    const chart = createChart(elRef.current, {
+      layout: { background: { color: 'transparent' }, textColor: 'transparent' },
+      grid: { vertLines: { visible: false }, horzLines: { visible: false } },
+      rightPriceScale: { visible: false }, leftPriceScale: { visible: false },
+      timeScale: { visible: false }, crosshair: { mode: 0 },
+      handleScroll: false, handleScale: false,
+      height, width: elRef.current.clientWidth,
+    });
+    chartRef.current = chart;
+    sRef.current = chart.addAreaSeries({ lineColor: color, topColor: color + '40',
+      bottomColor: color + '00', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: false });
+    const ro = new ResizeObserver(() =>
+      chart.applyOptions({ width: elRef.current.clientWidth }));
+    ro.observe(elRef.current);
+    return () => { ro.disconnect(); chart.remove(); chartRef.current = null; sRef.current = null; };
+  }, [height, up]);
+  useEffect(() => {
+    if (sRef.current && data && data.length) {
+      const seen = new Set(); const clean = [];
+      for (const p of data) { if (seen.has(p.time)) continue; seen.add(p.time); clean.push(p); }
+      sRef.current.setData(clean); chartRef.current?.timeScale().fitContent();
+    }
+  }, [data]);
+  return <div ref={elRef} style={{ height }} />;
+}
+
 // 단일 라인 (NAV/펀딩/상대가격) — 실시간 갱신 대응
 export function Line({ data, height = 200, color = '#5b8def', area = false }) {
   const elRef = useRef(null);

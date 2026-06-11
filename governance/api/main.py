@@ -29,6 +29,7 @@ from governance.engine import (
     fetch_candles, fetch_closes, fetch_current_prices,
     fetch_funding_history, fetch_current_funding, relative_series,
     make_generator, make_custom_generator, run_backtest, calc_metrics,
+    fetch_universe, compute_volatility, asset_sparkline,
 )
 from governance.engine.voting import apply_ema
 from governance.api import paper
@@ -59,9 +60,36 @@ def get_scenarios():
     return SCENARIO_META
 
 
-@app.get("/api/prices/{coin}")
+@app.get("/api/assets")
+def get_assets(category: Optional[str] = None, sub: Optional[str] = None,
+               search: Optional[str] = None, limit: int = 500):
+    """전 자산 레지스트리 (Crypto/TradFi/Pre-IPO). 필터 지원."""
+    uni = fetch_universe()
+    if category:
+        uni = [a for a in uni if a["category"] == category]
+    if sub:
+        uni = [a for a in uni if a["sub"] == sub]
+    if search:
+        q = search.upper()
+        uni = [a for a in uni if q in a["display"].upper()]
+    # 카테고리 카운트(필터 전 전체 기준)
+    full = fetch_universe()
+    counts = {}
+    for a in full:
+        counts[a["category"]] = counts.get(a["category"], 0) + 1
+    return {"counts": counts, "total": len(full), "assets": uni[:limit]}
+
+
+@app.get("/api/spark/{symbol:path}")
+def get_spark(symbol: str, days: int = 30):
+    """미니 차트용 종가 스파크라인 (HIP-3 prefix 'xyz:NVDA' 지원)."""
+    return {"symbol": symbol, "series": asset_sparkline(symbol, days=days),
+            "volatility": compute_volatility(symbol)}
+
+
+@app.get("/api/prices/{coin:path}")
 def get_prices(coin: str, days: int = 90, interval: str = "1d"):
-    coin = coin.upper()
+    coin = coin if ":" in coin else coin.upper()  # HIP-3 prefix 보존
     df = fetch_candles(coin, days=days, interval=interval)
     if df is None:
         raise HTTPException(404, f"{coin} 데이터 없음")
