@@ -7,36 +7,38 @@ GovernanceFund 본체의 **검증·온보딩 레이어**(돈 없이 메커니즘
 
 ```
 governance/
-  engine/        ← 투표→비중 핵심 로직 (노트북에서 추출, 검증됨)
-    profiles.py    코인/프로파일/변동성
+  engine/        ← 핵심 로직 (노트북에서 추출, 검증됨)
+    profiles.py    코인/프로파일(공격적·보수적·현물1x)/변동성
     alpha.py       adaptive_alpha (투표주기 적응형 EMA)
     voting.py      simulate_votes, votes_to_target, apply_ema
-    prices.py      HL 캔들/현재가 수집 (캐시)
-    scenarios.py   백테스트 투표 시나리오 생성기
-    backtest.py    run_backtest, calc_metrics
+    prices.py      HL 캔들/현재가/펀딩/상대가격/청산가 (동시성제한·캐시·재시도)
+    assets.py      HL 전 자산 레지스트리(크립토+TradFi+Pre-IPO), 배치 스파크
+    scenarios.py   백테스트 투표 시나리오 (모멘텀/역추세/이평/랜덤/완벽/커스텀)
+    backtest.py    run_backtest, calc_metrics (자산별 기여도 포함)
   api/           ← FastAPI 백엔드
-    main.py        엔드포인트 (config/prices/backtest/paper)
-    paper.py       페이퍼 트레이딩 상태 (인메모리 MVP)
-  web/           ← 정적 프론트 (lightweight-charts)
-    index.html, style.css, app.js
+    main.py        엔드포인트 (config/prices/funding/relative/assets/sparks/backtest/paper)
+    paper.py       페이퍼 상태 (인메모리: NAV·자산별손익·평단·청산가·펀딩캐리)
+  web/           ← 구버전 정적 프론트 (대체됨, 보존)
+  web-next/      ← ★ Next.js14 + Tailwind 프리미엄 프론트 (현행)
+    app/           page(백테스트) · paper · market
+    components/    Charts, TopNav, AssetModal, AssetPicker(⌘K)
   tests/
     test_engine.py 엔진 검증 (assert)
 ```
 
-## 실행
+## 실행 (서버 2개)
 
 ```bash
-# 의존성
+# 백엔드 (레포 루트에서)
 pip install -r governance/requirements.txt
+python -m uvicorn governance.api.main:app --port 8099
+
+# 프론트 (Next.js)
+cd governance/web-next && npm install && npm run dev   # → http://localhost:3010
+#   Next가 /api/* 를 8099 백엔드로 프록시
 
 # 엔진 검증 (선택)
 python governance/tests/test_engine.py
-
-# 서버 실행 (레포 루트에서)
-python -m uvicorn governance.api.main:app --port 8099
-
-# 브라우저
-http://127.0.0.1:8099
 ```
 
 ## 기능

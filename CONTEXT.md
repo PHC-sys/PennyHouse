@@ -195,12 +195,28 @@ tests/     test_engine.py (assert 검증 통과)
 #### 상업용 플랫폼 빌드 순서 (확정, 2026-06-11)
 상세: `docs/specs/GovernanceFund_Platform_roadmap.md`
 ```
-1차: 펀딩캐리 표기 정직화 + 1x 레버리지 + 평균단가/청산가
-2차: HL 전 자산(TradFi/Pre-IPO) 조회 + 변동성 자동계산 + 마켓 타일(m×n)
-3차: SQLite 멀티펀드 + 펀드 개설 폼(예치금/한도/Public·Private/허용지갑/유니버스)
-4차: 리플레이 모드 (게임형 과거 트레이딩)
-5차: 지갑 서명 인증 (Private 펀드)
+✅ 1차: 펀딩캐리 표기 정직화 + 1x 프로파일 + 자산별손익 + 평단/청산가
+✅ 2차: HL 전 자산(265개 크립토+TradFi+Pre-IPO) + 변동성 자동 + 마켓탭
+       + 상세모달 + ⌘K팔레트 + 즐겨찾기 + 거래량 + 로딩최적화(lazy/배치)
+⬜ 2.5차: 라이브 데이터 (HL WebSocket 워커→메모리→/ws 푸시) ← 현재
+        · 가격/펀딩 틱 갱신(플래시), 캔들 마지막봉만 update (라이브+가벼움)
+⬜ 3차: SQLite 멀티펀드 + 펀드 개설 폼(예치금/한도/Public·Private/허용지갑/유니버스)
+⬜ 4차: 리플레이 모드 (게임형 과거 트레이딩)
+⬜ 5차: 지갑 서명 인증 (Private 펀드)
 ```
+
+#### web-next 주요 컴포넌트 (2026-06-11)
+```
+app/page.jsx     백테스트(시나리오토글/내스탠스/로그/자산기여도 + 종목·펀딩·상대가격)
+app/paper        페이퍼(투표·NAV·자산별테이블[수익/펀딩/평단/청산거리]·리더보드)
+app/market       마켓 타일그리드(카테고리/검색/정렬/즐겨찾기/lazy스파크)
+components/
+  AssetModal     티커 상세 모달(캔들 OHLC호버·펀딩·상대가격)
+  AssetPicker    ⌘K 커맨드팔레트(검색·키보드·즐겨찾기) — 마켓검색+상대가격선택 재사용
+  Charts         MultiLine/Candles(휠줌·OHLC콜백)/Line/Spark
+```
+- 펀딩/캔들: 페이지네이션(730일), HIP-3 prefix(xyz:NVDA), /api/relative는 쿼리파라미터
+- 로딩: _post 세마포어(8)+재시도, /api/sparks 배치, IntersectionObserver lazy
 - **모바일 앱 확장 예정** → API-first 유지, 반응형 설계, 토큰/서명 인증
 - 펀딩캐리: HL 공식 = 노셔널×펀딩레이트 (레버리지 곱 정상, 버그 아님)
 - 자산: HL meta로 전 perp 제공하되 펀드는 유니버스(5~15종) 선택
