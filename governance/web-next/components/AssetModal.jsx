@@ -13,14 +13,15 @@ export default function AssetModal({ asset, onClose }) {
   const [candles, setCandles] = useState([]);
   const [funding, setFunding] = useState([]);
   const [rel, setRel] = useState([]);
-  // 비교 대상: {라벨: 심볼}
-  const REL_OPTS = { BTC: 'BTC', ETH: 'ETH', SOL: 'SOL',
-    GOLD: 'xyz:GOLD', SP500: 'xyz:SP500', NVDA: 'xyz:NVDA' };
   const [relB, setRelB] = useState(asset.display === 'BTC' ? 'ETH' : 'BTC');
+  const [universe, setUniverse] = useState([]);   // 전 자산 (상대가격 검색용)
   const [hover, setHover] = useState(null);
   const [vol, setVol] = useState(null);
 
   const sym = asset.symbol;
+  // display → symbol 매핑 (전 자산)
+  const dispToSym = {};
+  universe.forEach((u) => { if (!(u.display in dispToSym)) dispToSym[u.display] = u.symbol; });
 
   useEffect(() => {
     const onKey = (e) => e.key === 'Escape' && onClose();
@@ -33,14 +34,17 @@ export default function AssetModal({ asset, onClose }) {
       .then((d) => setCandles(d.candles)).catch(() => setCandles([]));
   }, [sym, days, interval]);
   useEffect(() => {
-    api(`/api/funding/${sym}?days=90`).then((d) => setFunding(d.series)).catch(() => setFunding([]));
     api(`/api/spark/${sym}?days=30`).then((d) => setVol(d.volatility)).catch(() => {});
+    api('/api/assets?limit=500').then((d) => setUniverse(d.assets || [])).catch(() => {});
   }, [sym]);
+  useEffect(() => {  // 펀딩 — 선택 기간 연동
+    api(`/api/funding/${sym}?days=${days}`).then((d) => setFunding(d.series)).catch(() => setFunding([]));
+  }, [sym, days]);
   useEffect(() => {
-    const bSym = REL_OPTS[relB] || relB;
+    const bSym = dispToSym[relB] || relB;
     api(`/api/relative?a=${encodeURIComponent(sym)}&b=${encodeURIComponent(bSym)}&days=${days}&interval=${interval}`)
       .then((d) => setRel(d.series)).catch(() => setRel([]));
-  }, [sym, relB, days, interval]);
+  }, [sym, relB, days, interval, universe.length]);
 
   const h = hover;
   return (
@@ -104,11 +108,14 @@ export default function AssetModal({ asset, onClose }) {
               <div className="flex items-center gap-2 mb-2">
                 <h4 className="text-sm font-semibold">상대가격</h4>
                 <span className="text-brand text-xs font-semibold">{asset.display} /</span>
-                <select className="input py-0.5 text-xs" value={relB}
-                  onChange={(e) => setRelB(e.target.value)}>
-                  {Object.keys(REL_OPTS).filter((x) => x !== asset.display)
-                    .map((x) => <option key={x}>{x}</option>)}
-                </select>
+                <input className="input py-0.5 text-xs w-28" list="rel-assets" value={relB}
+                  onChange={(e) => setRelB(e.target.value.toUpperCase())}
+                  placeholder="자산 검색" />
+                <datalist id="rel-assets">
+                  {universe.filter((u) => u.display !== asset.display)
+                    .map((u) => <option key={u.symbol} value={u.display} />)}
+                </datalist>
+                {!dispToSym[relB] && relB && <span className="text-[10px] text-muted">미존재</span>}
               </div>
               <Line data={rel} height={200} color="#a855f7" />
             </div>

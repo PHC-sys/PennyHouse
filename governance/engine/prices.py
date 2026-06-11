@@ -120,25 +120,32 @@ def fetch_current_prices(coins=None):
 
 def fetch_funding_history(coin, days=90):
     """
-    HL fundingHistory로 펀딩비 시계열 수집 (8시간마다 1건, 요청당 500 제한).
+    HL fundingHistory로 펀딩비 시계열 수집.
+    8시간마다 1건, 요청당 500건 제한(약 166일) → 페이지네이션으로 긴 기간 수집.
 
     Returns:
         pd.DataFrame[fundingRate] (UTC 인덱스), 실패 시 None.
         fundingRate = 1시간 지급요율. 연환산 = ×24×365.
+        ※ HL 보관 기간/상장 시점까지만 — 요청보다 짧을 수 있음(정상).
     """
     end_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
     start_ms = end_ms - days * 86_400_000
     all_rows = []
-    cur_end = end_ms
-    for _ in range(10):
+    cur_start = start_ms
+    # 시간당 1건 → days일은 약 days*24/500 페이지 + 여유
+    max_pages = max(3, days * 24 // 480 + 5)
+    last_ts = None
+    for _ in range(max_pages):
         batch = _post({'type': 'fundingHistory', 'coin': coin,
-                       'startTime': start_ms, 'endTime': cur_end})
+                       'startTime': cur_start, 'endTime': end_ms})
         if not batch:
             break
-        all_rows = batch + all_rows
-        if len(batch) < 500 or batch[0]['time'] <= start_ms:
+        all_rows += batch
+        new_end = batch[-1]['time']
+        if new_end == last_ts or new_end + 1 >= end_ms:  # 더 전진 못하면 종료
             break
-        cur_end = batch[0]['time'] - 1
+        last_ts = new_end
+        cur_start = new_end + 1
     if not all_rows:
         return None
     df = pd.DataFrame(all_rows)
