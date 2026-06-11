@@ -25,7 +25,7 @@ def simulate_votes(participants, coins=None):
     return results
 
 
-def votes_to_target(vote_result, coins=None):
+def votes_to_target(vote_result, coins=None, vol_map=None):
     """
     집단 투표 score → 목표 비중 (부호 있음, Target 방식).
 
@@ -34,21 +34,22 @@ def votes_to_target(vote_result, coins=None):
       vol_factor = 0.03 / 코인변동성  (변동성 큰 코인은 작게)
 
     score가 곧바로 목표 포지션을 결정 → 숏도 즉시 진입 가능.
-    (증분 누적 방식은 방향 전환이 느려 폐기됨.)
 
     Args:
         vote_result: simulate_votes() 결과.
         coins: 대상 코인 리스트.
+        vol_map: {symbol: 변동성} (임의 유니버스용). 없으면 기본 VOLATILITY.
 
     Returns:
         {coin: float}  부호 있는 목표 비중(%). 양수=롱, 음수=숏.
-        신호 없음(all hold)이면 None (현 비중 유지 의미).
+        신호 없음(all hold)이면 None.
     """
     coins = coins or COINS
+    vm = vol_map or VOLATILITY
     raw = {}
     for c in coins:
         score = vote_result[c]['score']
-        vol_factor = 0.03 / VOLATILITY.get(c, 0.05)
+        vol_factor = 0.03 / (vm.get(c) or 0.05)
         raw[c] = score * vol_factor
 
     total_abs = sum(abs(v) for v in raw.values())

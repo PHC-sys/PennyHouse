@@ -36,6 +36,7 @@ from governance.engine.voting import apply_ema
 from governance.api import paper
 from governance.api import live
 from governance.api import store
+from governance.api import funds as funds_engine
 import uuid
 
 app = FastAPI(title="GovernanceFund Backtest & Paper Trading")
@@ -351,6 +352,38 @@ def get_fund(fund_id: str):
 def remove_fund(fund_id: str):
     store.delete_fund(fund_id)
     return {"ok": True}
+
+
+class FundVoteReq(BaseModel):
+    user: str
+    deposit: float = 10000
+    votes: dict
+
+
+@app.post("/api/funds/{fund_id}/vote")
+def fund_vote(fund_id: str, req: FundVoteReq):
+    f = store.get_fund(fund_id)
+    if not f:
+        raise HTTPException(404, "펀드 없음")
+    funds_engine.submit_vote(f, req.user, req.deposit, req.votes)
+    return funds_engine.get_state(f)
+
+
+@app.get("/api/funds/{fund_id}/state")
+def fund_state(fund_id: str):
+    f = store.get_fund(fund_id)
+    if not f:
+        raise HTTPException(404, "펀드 없음")
+    return funds_engine.get_state(f)
+
+
+@app.post("/api/funds/{fund_id}/reset")
+def fund_reset(fund_id: str):
+    f = store.get_fund(fund_id)
+    if not f:
+        raise HTTPException(404, "펀드 없음")
+    funds_engine.reset_fund(f)
+    return funds_engine.get_state(f)
 
 
 # ────────────────────────────────────────────────────────────────
