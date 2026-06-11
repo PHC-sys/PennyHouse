@@ -1,41 +1,42 @@
 # GovernanceFund 사이트 사용 가이드
 
-> 백테스트 & 페이퍼 트레이딩 사이트 실행·사용법.
-> 코드: `governance/` · 작성일: 2026-06-10
+> 백테스트 · 페이퍼 트레이딩 · 마켓 사이트 실행·사용법.
+> 코드: `governance/` · 최종수정: 2026-06-11
 
 ---
 
-## 1. 실행
+## 1. 실행 (서버 2개)
 
-레포 루트(`D:\DeFi\PennyHouse`)에서:
+프론트가 Next.js로 재구축되어 **백엔드 + 프론트 2개**를 띄운다.
 
 ```bash
-# 1) 의존성 설치 (최초 1회)
+# ── 백엔드 (레포 루트에서) ──
 pip install -r governance/requirements.txt
-
-# 2) (선택) 엔진 검증 — assert 전부 통과하는지 확인
-python governance/tests/test_engine.py
-
-# 3) 서버 실행
 python -m uvicorn governance.api.main:app --port 8099
+#   → HL WebSocket 라이브 워커 자동 기동, SQLite(governance.db) 자동 생성
+
+# ── 프론트 (별도 터미널) ──
+cd governance/web-next
+npm install          # 최초 1회
+npm run dev          # → http://localhost:3010
+#   Next가 /api/* 를 8099 백엔드로 프록시
 ```
 
-브라우저에서 접속:
-```
-http://127.0.0.1:8099
-```
+브라우저: **http://localhost:3010**
 
-서버를 끄려면 터미널에서 `Ctrl + C`.
-
-> Windows에서 한글 출력이 깨지면: `set PYTHONIOENCODING=utf-8` 후 실행.
+> Windows 한글 깨짐: `set PYTHONIOENCODING=utf-8` 후 백엔드 실행.
+> (구버전 정적 프론트 `governance/web/`도 8099에 남아있으나 대체됨)
 
 ---
 
 ## 2. 화면 구성
 
-상단 탭 2개:
+상단 탭 3개:
 - **📈 과거 백테스트** — 과거 데이터로 투표 전략 시험
-- **🗳️ 라이브 페이퍼 트레이딩** — 돈 없이 실시간 투표 체험
+- **🗳️ 라이브 페이퍼 트레이딩** — 돈 없이 실시간 투표 체험 (멀티펀드 전환 중)
+- **🌐 마켓** — HL 전 자산(크립토·TradFi·Pre-IPO) 라이브 시세
+
+⌘K(Ctrl+K): 어디서든 자산 빠른 검색 팔레트.
 
 ---
 
@@ -93,44 +94,44 @@ http://127.0.0.1:8099
 닉네임을 바꿔가며 여러 번 투표하면 여러 참여자가 생긴다.
 → **예치금 많은 사람의 표가 더 세게 반영**되는 걸 확인할 수 있다.
 
-### NAV가 0%에 가까운 이유
-NAV는 HL **현재가 mark-to-market**이라, 짧은 시간엔 가격이 거의 안 변해 0% 근처.
-시간이 지나며 실제 가격 변동이 누적된다. (빠른 데모용 "과거 리플레이" 모드는 추후 추가 예정)
+### NAV / 라이브
+- 마켓 시세·모달 캔들 마지막 봉은 HL WebSocket으로 **실시간**(가격 깜빡임).
+- 페이퍼 NAV는 라이브 가격 mark-to-market이라 짧은 시간엔 0% 근처, 시간이 지나며 누적.
 
 ### 세션 초기화
-[세션 초기화] 버튼 → 모든 참여자/포지션 리셋.
+[세션 초기화] → 해당 펀드 참여자/포지션 리셋.
 
 ---
 
-## 5. API (직접 호출용)
+## 5. 마켓 탭
+
+- 카테고리(크립토/TradFi/Pre-IPO) · 검색 · 정렬(거래량/24h/펀딩/가격) · 즐겨찾기(★)
+- 타일: 라이브 가격(플래시) + 스파크라인(스크롤 시 lazy 로드)
+- 타일 클릭 → **상세 모달**: 캔들(OHLC 호버·휠 줌·봉 롤오버) + 펀딩비 추이 + 상대가격
+- ⌘K: 빠른 검색 팔레트
+
+---
+
+## 6. API (직접 호출용)
 
 | 메서드 | 경로 | 설명 |
 |--------|------|------|
-| GET | `/api/config` | 코인·프로파일 메타 |
-| GET | `/api/prices/{coin}?days=90` | HL 캔들 |
-| POST | `/api/backtest` | 시나리오 백테스트 |
-| POST | `/api/paper/vote` | 페이퍼 투표 제출 |
-| GET | `/api/paper/state` | 펀드 현황+NAV |
-| POST | `/api/paper/reset` | 세션 초기화 |
-
-예) 백테스트:
-```bash
-curl -X POST http://127.0.0.1:8099/api/backtest \
-  -H "Content-Type: application/json" \
-  -d '{"profile":"aggressive","days":180,"rebalance_every":7}'
-```
+| GET | `/api/config` · `/api/scenarios` | 메타 |
+| GET | `/api/prices/{sym}` · `/api/funding/{sym}` · `/api/relative?a=&b=` | 차트(HIP-3 prefix 지원) |
+| GET | `/api/assets` · `/api/spark/{sym}` · POST `/api/sparks` | 자산 레지스트리/스파크 |
+| GET | `/api/live` · WS `/ws/market` | 라이브 가격 |
+| POST | `/api/backtest` | 시나리오 백테스트(+ custom_votes) |
+| POST/GET/DELETE | `/api/funds` · `/api/funds/{id}` | 멀티펀드 CRUD |
+| POST | `/api/funds/{id}/vote` · GET `/state` · POST `/reset` | 펀드별 운용 |
+| (구) | `/api/paper/*` | 단일 페이퍼(멀티펀드로 이전 중) |
 
 ---
 
-## 6. 한계 (MVP) & 다음 단계
+## 7. 현재 단계 & 다음
 
-현재 한계:
-- 페이퍼 상태가 프로세스 메모리 → 서버 재시작 시 초기화 (추후 SQLite)
-- 인증 없음 (추후 지갑 서명)
-- 단일 펀드 프로파일 (최신 투표 기준)
+- ✅ 백테스트 / 페이퍼 / 마켓 / 라이브 / 멀티펀드 백엔드(3-1·3-2)
+- 🔄 3-3 펀드 목록·개설 화면, 3-4 펀드 상세 화면 (프론트)
+- ⬜ 리플레이 모드 · 지갑 인증 · AI Keeper · 온체인 컨트랙트
 
-다음 단계:
-- AI Keeper 프로토타입 — 이 `governance.engine`을 그대로 써서 실제 HL 주문 실행
-- 온체인 투표/예치 컨트랙트
-
-> 설계: `docs/specs/GovernanceFund_Backtest_spec.md`, `docs/specs/GovernanceFund_spec.md`
+> 전체 계획: `docs/specs/GovernanceFund_Platform_roadmap.md`
+> 설계: `docs/specs/GovernanceFund_spec.md`, `..._Backtest_spec.md`

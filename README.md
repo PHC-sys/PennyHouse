@@ -422,6 +422,14 @@ cd governance/web-next && npm install && npm run dev   # → http://localhost:30
 | 2026-06-10 | [docs/specs/GovernanceFund_spec.md](docs/specs/GovernanceFund_spec.md) | 거버넌스 펀드 본체 스펙 (투표→비중 5단계 파이프라인) |
 | 2026-06-10 | [docs/specs/GovernanceFund_Backtest_spec.md](docs/specs/GovernanceFund_Backtest_spec.md) | 백테스트/페이퍼 트레이딩 사이트 스펙 |
 | 2026-06-10 | [backtest/GovernanceFund_weight_decision/](backtest/GovernanceFund_weight_decision/) | 투표 알고리즘(Target+적응형 alpha) 검증, 백테스트 엔진, 자동 테스트 |
+| 2026-06-10 | [governance/](governance/) | engine 모듈 추출 + FastAPI + 백테스트/페이퍼 사이트(정적) |
+| 2026-06-11 | [governance/web-next/](governance/web-next/) | Next.js+Tailwind 프리미엄 프론트 재구축 |
+| 2026-06-11 | [governance/engine/](governance/engine/) | 1·2차: 자산별 손익·평단·청산가, 전 자산 레지스트리(크립토+TradFi+Pre-IPO), 변동성 자동 |
+| 2026-06-11 | [governance/web-next/app/market/](governance/web-next/app/market/) | 마켓 탭(블룸버그 타일·상세모달·⌘K팔레트·즐겨찾기·lazy로딩) |
+| 2026-06-11 | [governance/api/live.py](governance/api/live.py) | 2.5차 라이브: HL WebSocket 워커→메모리→/ws 푸시, 가격 플래시·캔들 봉 롤오버 |
+| 2026-06-11 | [governance/api/store.py](governance/api/store.py), [funds.py](governance/api/funds.py) | 3차: SQLite 멀티펀드 + 펀드별 운용 엔진(3-1·3-2) |
+| 2026-06-11 | [docs/specs/GovernanceFund_Platform_roadmap.md](docs/specs/GovernanceFund_Platform_roadmap.md) | 상업용 플랫폼 로드맵(5단계) + 라이브 아키텍처 + 페이퍼vs실제 통찰 |
+| 2026-06-11 | [Note/20260611(GovernanceFund_Platform_Sprint).md](Note/20260611(GovernanceFund_Platform_Sprint).md) | 플랫폼 스프린트 개발일지 (결정·이유·트러블슈팅) |
 
 설계 참고 문서:
 
