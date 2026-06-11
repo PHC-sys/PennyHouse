@@ -35,6 +35,8 @@ from governance.engine import (
 from governance.engine.voting import apply_ema
 from governance.api import paper
 from governance.api import live
+from governance.api import store
+import uuid
 
 app = FastAPI(title="GovernanceFund Backtest & Paper Trading")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -43,6 +45,23 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 @app.on_event("startup")
 def _startup():
     live.start_worker()  # HL WebSocket 라이브 가격 워커 기동
+    store.init_db()
+    _seed_demo_fund()
+
+
+def _seed_demo_fund():
+    """첫 실행 시 Demo 펀드 1개 자동 생성 (빈 목록 방지)."""
+    if store.list_funds():
+        return
+    store.create_fund({
+        'id': 'demo-' + uuid.uuid4().hex[:8],
+        'name': 'Demo 펀드 — 자유 체험',
+        'kind': 'demo', 'visibility': 'public', 'creator': None,
+        'profile': 'aggressive', 'leverage': None,
+        'initial_deposit': 100000, 'max_deposit': None,
+        'universe': ['BTC', 'ETH', 'SOL', 'HYPE'],
+        'init_weights': {}, 'allowlist': [],
+    })
 
 
 # ────────────────────────────────────────────────────────────────
@@ -254,7 +273,88 @@ def post_backtest(req: BacktestReq):
 
 
 # ────────────────────────────────────────────────────────────────
-# 페이퍼 트레이딩
+# 멀티펀드 CRUD
+# ────────────────────────────────────────────────────────────────
+class CreateFundReq(BaseModel):
+    name: str
+    kind: str = "demo"            # demo | real
+    visibility: str = "public"    # public | private
+    creator: Optional[str] = None
+    profile: str = "aggressive"
+    leverage: Optional[int] = None
+    initial_deposit: float = 100000
+    max_deposit: Optional[float] = None
+    universe: list[str] = ["BTC", "ETH", "SOL", "HYPE"]
+    init_weights: Optional[dict] = None
+    allowlist: list[str] = []
+
+
+def _fund_summary(f, votes_count_map, nav_last):
+    """목록용 요약 (TVL/참여자/수익률)."""
+    fid = f["id"]
+    return {
+        **f,
+        "allowlist": None,  # 목록엔 미노출
+        "participants": votes_count_map.get(fid, 0),
+        "nav_ret_pct": nav_last.get(fid),
+    }
+
+
+@app.post("/api/funds")
+def create_fund(req: CreateFundReq):
+    if req.kind not in ("demo", "real"):
+        raise HTTPException(400, "kind는 demo|real")
+    if req.profile not in FUND_PROFILES:
+        raise HTTPException(400, "알 수 없는 프로파일")
+    if not req.universe:
+        raise HTTPException(400, "운용 자산을 1개 이상 선택")
+    fid = ("demo" if req.kind == "demo" else "fund") + "-" + uuid.uuid4().hex[:8]
+    store.create_fund({"id": fid, **req.dict()})
+    return store.get_fund(fid)
+
+
+@app.get("/api/funds")
+def list_funds(user: Optional[str] = None):
+    funds = store.list_funds()
+    # 참여자 수 / 최신 NAV
+    vc, nv = {}, {}
+    for f in funds:
+        votes = store.get_votes(f["id"])
+        vc[f["id"]] = len(votes)
+        nav = store.get_nav(f["id"], limit=1)
+        nv[f["id"]] = nav[-1]["ret_pct"] if nav else None
+    mine = store.funds_for_user(user) if user else set()
+
+    out = [_fund_summary(f, vc, nv) for f in funds]
+    # 정렬: 내 펀드 → demo → 최신
+    def sort_key(s):
+        return (0 if s["id"] in mine else 1,
+                0 if s["kind"] == "demo" else 1,
+                -s["created_at"])
+    out.sort(key=sort_key)
+    for s in out:
+        s["is_mine"] = s["id"] in mine
+    return {"funds": out}
+
+
+@app.get("/api/funds/{fund_id}")
+def get_fund(fund_id: str):
+    f = store.get_fund(fund_id)
+    if not f:
+        raise HTTPException(404, "펀드 없음")
+    f["allowlist"] = store.get_allowlist(fund_id)
+    f["participants"] = len(store.get_votes(fund_id))
+    return f
+
+
+@app.delete("/api/funds/{fund_id}")
+def remove_fund(fund_id: str):
+    store.delete_fund(fund_id)
+    return {"ok": True}
+
+
+# ────────────────────────────────────────────────────────────────
+# 페이퍼 트레이딩 (단일 — 3-2에서 펀드별로 전환 예정)
 # ────────────────────────────────────────────────────────────────
 class VoteReq(BaseModel):
     user: str
