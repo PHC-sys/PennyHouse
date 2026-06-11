@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { api, cls } from '@/components/api';
 import { Candles, Line } from '@/components/Charts';
 import AssetPicker, { VOL } from '@/components/AssetPicker';
+import { useLiveMids } from '@/components/useLive';
 
 const INTERVALS = ['1h', '4h', '1d', '1w'];
 const FMT = (v) => (v == null ? '—' : v >= 1000 ? v.toLocaleString()
@@ -21,6 +22,11 @@ export default function AssetModal({ asset, onClose }) {
   const [vol, setVol] = useState(null);
 
   const sym = asset.symbol;
+  // 라이브: 이 자산 + 비교 자산만 구독
+  const { prices: live, flash } = useLiveMids([sym, relAsset.symbol]);
+  const livePrice = live[sym];
+  const prevDay = asset.change_24h != null ? asset.price / (1 + asset.change_24h / 100) : null;
+  const liveChange = (prevDay && livePrice) ? (livePrice / prevDay - 1) * 100 : asset.change_24h;
 
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape' && !pickerOpen) onClose(); };
@@ -58,9 +64,10 @@ export default function AssetModal({ asset, onClose }) {
             <span className="text-[10px] uppercase text-muted border border-border rounded px-1.5 py-0.5">
               {asset.sub || asset.category}</span>
           </div>
-          <div className="stat-num text-lg">${FMT(asset.price)}</div>
-          <div className={`stat-num font-semibold ${cls(asset.change_24h)}`}>
-            {asset.change_24h > 0 ? '+' : ''}{asset.change_24h}% <span className="text-[10px] text-muted">24h</span>
+          <div className={`stat-num text-lg px-1 -mx-1 ${flash[sym] === 'up' ? 'flash-up'
+            : flash[sym] === 'down' ? 'flash-down' : ''}`}>${FMT(livePrice ?? asset.price)}</div>
+          <div className={`stat-num font-semibold ${cls(liveChange)}`}>
+            {liveChange > 0 ? '+' : ''}{liveChange?.toFixed(2)}% <span className="text-[10px] text-muted">24h</span>
           </div>
           <div className="flex gap-4 text-xs text-muted ml-2 flex-wrap">
             <span>펀딩 <span className={cls(-asset.funding_annual)}>{asset.funding_annual}%</span></span>
@@ -95,7 +102,7 @@ export default function AssetModal({ asset, onClose }) {
                 <span>C <span className={h.close >= h.open ? 'pos' : 'neg'}>{FMT(h.close)}</span></span>
               </div>
             )}
-            <Candles data={candles} height={340} onCrosshair={setHover} />
+            <Candles data={candles} height={340} onCrosshair={setHover} livePrice={livePrice} />
           </div>
 
           {/* 펀딩 + 상대가격 */}

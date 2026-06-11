@@ -50,11 +50,12 @@ export function MultiLine({ lines, height = 300, logScale = false }) {
 }
 
 // 캔들 — 차트/시리즈는 mount 시 생성, 데이터만 갱신 (StrictMode 안전)
-// onCrosshair: 호버 중인 캔들 {time,open,high,low,close} 또는 null 콜백
-export function Candles({ data, height = 360, onCrosshair }) {
+// onCrosshair: 호버 중인 캔들 콜백 / livePrice: 진행 중 봉을 실시간 갱신
+export function Candles({ data, height = 360, onCrosshair, livePrice }) {
   const elRef = useRef(null);
   const chartRef = useRef(null);
   const sRef = useRef(null);
+  const lastBarRef = useRef(null);
   const cbRef = useRef(onCrosshair);
   cbRef.current = onCrosshair;
   useEffect(() => {
@@ -76,10 +77,21 @@ export function Candles({ data, height = 360, onCrosshair }) {
   }, [height]);
   useEffect(() => {
     if (sRef.current && data && data.length) {
-      sRef.current.setData(dedupe(data));
+      const clean = dedupe(data);
+      sRef.current.setData(clean);
+      lastBarRef.current = { ...clean[clean.length - 1] };
       chartRef.current?.timeScale().fitContent();
     }
   }, [data]);
+  // 라이브 가격으로 마지막 봉의 종가/고저 갱신 (전체 재로딩 X)
+  useEffect(() => {
+    const lb = lastBarRef.current;
+    if (!sRef.current || !lb || livePrice == null) return;
+    const updated = { ...lb, close: livePrice,
+      high: Math.max(lb.high, livePrice), low: Math.min(lb.low, livePrice) };
+    lastBarRef.current = updated;
+    try { sRef.current.update(updated); } catch {}
+  }, [livePrice]);
   return <div ref={elRef} style={{ height }} />;
 }
 
