@@ -173,22 +173,37 @@ npm run dev   # localhost:3001
 
 #### GovernanceFund 진행 상황
 1. ✅ governance_engine 모듈 추출 (노트북 → `governance/engine/*.py`)
-2. ✅ 백테스트 + 페이퍼 트레이딩 웹사이트 (FastAPI + 정적 프론트 + lightweight-charts)
-   - 위치: `governance/` (engine/api/web/tests)
-   - 실행: `python -m uvicorn governance.api.main:app --port 8099` → http://127.0.0.1:8099
-   - 사용 가이드: `docs/guides/GovernanceFund_site_usage.md`
-   - ※ 프론트는 Next.js 대신 정적 HTML/JS 선택 (빠른 MVP, 추후 이식 가능)
-3. ⬜ AI Keeper 프로토타입 (governance.engine 재사용 → 실제 HL 주문) ← 다음
-4. ⬜ 온체인 투표/예치 컨트랙트
+2. ✅ 백테스트 + 페이퍼 트레이딩 사이트 (FastAPI 백엔드)
+3. ✅ 데이터 레이어 확장 (캔들 페이지네이션, 펀딩비, 상대가격, interval, 신규 시나리오)
+4. ✅ Next.js + Tailwind 프리미엄 프론트 재구축 (`governance/web-next`)
+5. ⬜ 상업용 플랫폼 확장 → `docs/specs/GovernanceFund_Platform_roadmap.md` (← 현재)
+6. ⬜ AI Keeper 프로토타입 / 온체인 컨트랙트
 
-#### governance/ 구조 (2026-06-10 신규)
+#### governance/ 구조 (2026-06-11 현재)
 ```
-engine/   profiles, alpha, voting, prices, scenarios, backtest (검증된 핵심 로직)
-api/      main.py(엔드포인트), paper.py(페이퍼 상태 인메모리)
-web/      index.html, style.css, app.js (2탭: 백테스트/페이퍼)
-tests/    test_engine.py (assert 검증 통과)
+engine/    profiles, alpha, voting, prices, scenarios, backtest (검증된 핵심 로직)
+api/       main.py(엔드포인트), paper.py(페이퍼 상태 인메모리)
+web/       구버전 정적 프론트 (대체 예정, 아직 보존)
+web-next/  ★ Next.js14 + Tailwind 프리미엄 프론트 (현행)
+tests/     test_engine.py (assert 검증 통과)
 ```
-- 페이퍼 상태는 인메모리 MVP → 추후 SQLite, 인증 없음 → 추후 지갑서명
+실행:
+- 백엔드: `python -m uvicorn governance.api.main:app --port 8099`
+- 프론트: `cd governance/web-next && npm run dev` → http://localhost:3010
+  (Next가 /api/* 를 8099로 프록시)
+
+#### 상업용 플랫폼 빌드 순서 (확정, 2026-06-11)
+상세: `docs/specs/GovernanceFund_Platform_roadmap.md`
+```
+1차: 펀딩캐리 표기 정직화 + 1x 레버리지 + 평균단가/청산가
+2차: HL 전 자산(TradFi/Pre-IPO) 조회 + 변동성 자동계산 + 마켓 타일(m×n)
+3차: SQLite 멀티펀드 + 펀드 개설 폼(예치금/한도/Public·Private/허용지갑/유니버스)
+4차: 리플레이 모드 (게임형 과거 트레이딩)
+5차: 지갑 서명 인증 (Private 펀드)
+```
+- **모바일 앱 확장 예정** → API-first 유지, 반응형 설계, 토큰/서명 인증
+- 펀딩캐리: HL 공식 = 노셔널×펀딩레이트 (레버리지 곱 정상, 버그 아님)
+- 자산: HL meta로 전 perp 제공하되 펀드는 유니버스(5~15종) 선택
 
 #### 인프라 결정 사항 (논의 완료)
 - Keeper 실행: GitHub Actions cron(주간 리밸런싱) + Render 상시서버(청산 모니터링)
