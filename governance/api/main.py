@@ -17,7 +17,8 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from fastapi import FastAPI, HTTPException
+import asyncio
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -33,9 +34,15 @@ from governance.engine import (
 )
 from governance.engine.voting import apply_ema
 from governance.api import paper
+from governance.api import live
 
 app = FastAPI(title="GovernanceFund Backtest & Paper Trading")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+
+@app.on_event("startup")
+def _startup():
+    live.start_worker()  # HL WebSocket 라이브 가격 워커 기동
 
 
 # ────────────────────────────────────────────────────────────────
@@ -145,6 +152,41 @@ def get_funding(coin: str, days: int = 90):
 @app.get("/api/current_funding")
 def get_current_funding():
     return fetch_current_funding(COINS)
+
+
+@app.get("/api/live")
+def get_live(symbols: Optional[str] = None):
+    """라이브 가격 스냅샷 (REST 폴백). symbols=쉼표구분."""
+    syms = symbols.split(",") if symbols else None
+    return {"mids": live.get_mids(syms), "status": live.status()}
+
+
+@app.websocket("/ws/market")
+async def ws_market(ws: WebSocket):
+    """라이브 가격 푸시. 클라이언트가 보낸 symbols만 변경분 전송."""
+    await ws.accept()
+    watch = None  # None=전체
+    last = {}
+    try:
+        # 첫 메시지로 관심 심볼 받기 (없으면 전체)
+        try:
+            init = await asyncio.wait_for(ws.receive_json(), timeout=0.5)
+            if isinstance(init, dict) and init.get("symbols"):
+                watch = list(init["symbols"])
+        except (asyncio.TimeoutError, Exception):
+            pass
+
+        while True:
+            mids = live.get_mids(watch)
+            diff = {s: p for s, p in mids.items() if last.get(s) != p}
+            if diff:
+                await ws.send_json({"mids": diff})
+                last.update(diff)
+            await asyncio.sleep(1.0)
+    except WebSocketDisconnect:
+        return
+    except Exception:
+        return
 
 
 @app.get("/api/relative")

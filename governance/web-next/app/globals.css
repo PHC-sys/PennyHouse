@@ -47,3 +47,9 @@ html, body {
 
 @keyframes fadein { from { opacity: 0; transform: translateY(2px); } to { opacity: 1; transform: none; } }
 .animate-fadein { animation: fadein 0.35s ease both; }
+
+/* 가격 틱 플래시 */
+@keyframes flashup { 0% { background: rgba(38,208,124,0.28); } 100% { background: transparent; } }
+@keyframes flashdown { 0% { background: rgba(246,70,93,0.28); } 100% { background: transparent; } }
+.flash-up { animation: flashup 0.5s ease; border-radius: 4px; }
+.flash-down { animation: flashdown 0.5s ease; border-radius: 4px; }

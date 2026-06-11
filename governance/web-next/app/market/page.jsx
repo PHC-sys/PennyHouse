@@ -4,6 +4,7 @@ import { api, cls } from '@/components/api';
 import { Spark } from '@/components/Charts';
 import AssetModal from '@/components/AssetModal';
 import AssetPicker, { useFavs, VOL } from '@/components/AssetPicker';
+import { useLiveMids } from '@/components/useLive';
 
 const CATS = [
   { key: 'all', label: '전체' },
@@ -57,6 +58,9 @@ export default function MarketPage() {
     const va = a[sortKey] ?? -1e18, vb = b[sortKey] ?? -1e18;
     return vb - va;
   });
+
+  // 라이브 가격 (현재 목록 자산만 구독)
+  const { prices: live, flash } = useLiveMids(assets.map((a) => a.symbol));
 
   // 스파크라인: 화면에 보이는 타일만 배치로 lazy 로드 (점진적 렌더)
   const [sparks, setSparks] = useState({});
@@ -115,6 +119,7 @@ export default function MarketPage() {
       <div className="grid gap-3"
         style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))' }}>
         {assets.map((a) => <Tile key={a.symbol} a={a} spark={sparks[a.symbol]}
+          live={live[a.symbol]} flash={flash[a.symbol]}
           onVisible={() => requestSpark(a.symbol)}
           onClick={() => setSelected(a)}
           fav={!!favs[a.symbol]} onFav={() => toggleFav(a.symbol)} />)}
@@ -128,8 +133,12 @@ export default function MarketPage() {
   );
 }
 
-function Tile({ a, spark, onVisible, onClick, fav, onFav }) {
-  const up = (a.change_24h ?? 0) >= 0;
+function Tile({ a, spark, live, flash, onVisible, onClick, fav, onFav }) {
+  // 라이브 가격이 있으면 그것으로, 등락도 prevDay 기준 재계산
+  const price = live ?? a.price;
+  const prevDay = a.change_24h != null ? a.price / (1 + a.change_24h / 100) : null;
+  const change = (prevDay && live) ? (live / prevDay - 1) * 100 : a.change_24h;
+  const up = (change ?? 0) >= 0;
   const ref = useRef(null);
   useEffect(() => {
     const el = ref.current;
@@ -152,12 +161,14 @@ function Tile({ a, spark, onVisible, onClick, fav, onFav }) {
             <span className="text-[9px] text-muted uppercase border border-border rounded px-1">
               {a.sub || a.category}</span>
           </div>
-          <div className="text-[11px] text-muted stat-num">
-            {a.price >= 1 ? a.price.toLocaleString() : a.price}</div>
+          <div className={`text-[11px] text-muted stat-num inline-block px-1 -mx-1
+            ${flash === 'up' ? 'flash-up' : flash === 'down' ? 'flash-down' : ''}`}>
+            {price >= 1 ? price.toLocaleString(undefined, { maximumFractionDigits: 2 })
+              : price?.toPrecision?.(4)}</div>
         </div>
         <div className="text-right">
-          <div className={`stat-num text-sm font-semibold ${cls(a.change_24h)}`}>
-            {a.change_24h != null ? (a.change_24h > 0 ? '+' : '') + a.change_24h + '%' : '—'}</div>
+          <div className={`stat-num text-sm font-semibold ${cls(change)}`}>
+            {change != null ? (change > 0 ? '+' : '') + change.toFixed(2) + '%' : '—'}</div>
           <div className="text-[9px] text-muted">24h</div>
         </div>
       </div>
