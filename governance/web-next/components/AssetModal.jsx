@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { api, cls } from '@/components/api';
 import { Candles, Line } from '@/components/Charts';
+import AssetPicker, { VOL } from '@/components/AssetPicker';
 
 const INTERVALS = ['1h', '4h', '1d', '1w'];
 const FMT = (v) => (v == null ? '—' : v >= 1000 ? v.toLocaleString()
@@ -13,15 +14,13 @@ export default function AssetModal({ asset, onClose }) {
   const [candles, setCandles] = useState([]);
   const [funding, setFunding] = useState([]);
   const [rel, setRel] = useState([]);
-  const [relB, setRelB] = useState(asset.display === 'BTC' ? 'ETH' : 'BTC');
-  const [universe, setUniverse] = useState([]);   // 전 자산 (상대가격 검색용)
+  const [relAsset, setRelAsset] = useState({ symbol: asset.display === 'BTC' ? 'ETH' : 'BTC',
+    display: asset.display === 'BTC' ? 'ETH' : 'BTC' });
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [hover, setHover] = useState(null);
   const [vol, setVol] = useState(null);
 
   const sym = asset.symbol;
-  // display → symbol 매핑 (전 자산)
-  const dispToSym = {};
-  universe.forEach((u) => { if (!(u.display in dispToSym)) dispToSym[u.display] = u.symbol; });
 
   useEffect(() => {
     const onKey = (e) => e.key === 'Escape' && onClose();
@@ -35,16 +34,15 @@ export default function AssetModal({ asset, onClose }) {
   }, [sym, days, interval]);
   useEffect(() => {
     api(`/api/spark/${sym}?days=30`).then((d) => setVol(d.volatility)).catch(() => {});
-    api('/api/assets?limit=500').then((d) => setUniverse(d.assets || [])).catch(() => {});
   }, [sym]);
   useEffect(() => {  // 펀딩 — 선택 기간 연동
     api(`/api/funding/${sym}?days=${days}`).then((d) => setFunding(d.series)).catch(() => setFunding([]));
   }, [sym, days]);
   useEffect(() => {
-    const bSym = dispToSym[relB] || relB;
+    const bSym = relAsset.symbol;
     api(`/api/relative?a=${encodeURIComponent(sym)}&b=${encodeURIComponent(bSym)}&days=${days}&interval=${interval}`)
       .then((d) => setRel(d.series)).catch(() => setRel([]));
-  }, [sym, relB, days, interval, universe.length]);
+  }, [sym, relAsset, days, interval]);
 
   const h = hover;
   return (
@@ -64,9 +62,11 @@ export default function AssetModal({ asset, onClose }) {
           <div className={`stat-num font-semibold ${cls(asset.change_24h)}`}>
             {asset.change_24h > 0 ? '+' : ''}{asset.change_24h}% <span className="text-[10px] text-muted">24h</span>
           </div>
-          <div className="flex gap-4 text-xs text-muted ml-2">
+          <div className="flex gap-4 text-xs text-muted ml-2 flex-wrap">
             <span>펀딩 <span className={cls(-asset.funding_annual)}>{asset.funding_annual}%</span></span>
             <span>변동성 <span className="text-fg">{vol != null ? (vol * 100).toFixed(1) + '%' : '—'}</span></span>
+            <span>24h Vol <span className="text-fg">${VOL(asset.volume_24h)}</span></span>
+            <span>OI <span className="text-fg">${VOL(asset.open_interest)}</span></span>
             <span>최대 {asset.max_leverage}x</span>
           </div>
           <button className="ml-auto btn-ghost py-1" onClick={onClose}>닫기 ✕</button>
@@ -108,20 +108,17 @@ export default function AssetModal({ asset, onClose }) {
               <div className="flex items-center gap-2 mb-2">
                 <h4 className="text-sm font-semibold">상대가격</h4>
                 <span className="text-brand text-xs font-semibold">{asset.display} /</span>
-                <input className="input py-0.5 text-xs w-28" list="rel-assets" value={relB}
-                  onChange={(e) => setRelB(e.target.value.toUpperCase())}
-                  placeholder="자산 검색" />
-                <datalist id="rel-assets">
-                  {universe.filter((u) => u.display !== asset.display)
-                    .map((u) => <option key={u.symbol} value={u.display} />)}
-                </datalist>
-                {!dispToSym[relB] && relB && <span className="text-[10px] text-muted">미존재</span>}
+                <button className="btn-ghost py-0.5 px-2 text-xs flex items-center gap-1"
+                  onClick={() => setPickerOpen(true)}>
+                  {relAsset.display} <span className="text-muted">▾</span></button>
               </div>
               <Line data={rel} height={200} color="#a855f7" />
             </div>
           </div>
         </div>
       </div>
+      <AssetPicker open={pickerOpen} onClose={() => setPickerOpen(false)}
+        onSelect={(a) => setRelAsset(a)} title="비교 자산 선택" />
     </div>
   );
 }

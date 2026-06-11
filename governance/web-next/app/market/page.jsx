@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { api, cls } from '@/components/api';
 import { Spark } from '@/components/Charts';
 import AssetModal from '@/components/AssetModal';
+import AssetPicker, { useFavs, VOL } from '@/components/AssetPicker';
 
 const CATS = [
   { key: 'all', label: '전체' },
@@ -25,8 +26,10 @@ export default function MarketPage() {
   const [sub, setSub] = useState('');
   const [search, setSearch] = useState('');
   const [data, setData] = useState(null);
-  const [sortKey, setSortKey] = useState('change_24h');
+  const [sortKey, setSortKey] = useState('volume_24h');
   const [selected, setSelected] = useState(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [favs, toggleFav] = useFavs();
 
   useEffect(() => {
     const q = new URLSearchParams();
@@ -37,8 +40,21 @@ export default function MarketPage() {
     api('/api/assets?' + q.toString()).then(setData).catch(() => setData(null));
   }, [cat, sub, search]);
 
+  // ⌘K / Ctrl+K 로 팔레트 열기
+  useEffect(() => {
+    const onKey = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault(); setPickerOpen(true);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   const assets = (data?.assets || []).slice().sort((a, b) => {
-    const va = a[sortKey] ?? -999, vb = b[sortKey] ?? -999;
+    const fa = favs[a.symbol] ? 1 : 0, fb = favs[b.symbol] ? 1 : 0;
+    if (fa !== fb) return fb - fa;
+    const va = a[sortKey] ?? -1e18, vb = b[sortKey] ?? -1e18;
     return vb - va;
   });
 
@@ -63,10 +79,12 @@ export default function MarketPage() {
             ))}
           </div>
         )}
-        <input className="input ml-auto w-44" placeholder="검색 (예: NVDA)"
-          value={search} onChange={(e) => setSearch(e.target.value)} />
+        <button className="btn-ghost ml-auto flex items-center gap-2" onClick={() => setPickerOpen(true)}>
+          🔍 빠른 검색 <kbd className="text-[10px] border border-border rounded px-1">⌘K</kbd>
+        </button>
         <select className="input py-1.5 text-xs" value={sortKey}
           onChange={(e) => setSortKey(e.target.value)}>
+          <option value="volume_24h">정렬: 거래량</option>
           <option value="change_24h">정렬: 24h 변동</option>
           <option value="funding_annual">정렬: 펀딩</option>
           <option value="price">정렬: 가격</option>
@@ -76,16 +94,19 @@ export default function MarketPage() {
       {/* 타일 그리드 */}
       <div className="grid gap-3"
         style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))' }}>
-        {assets.map((a) => <Tile key={a.symbol} a={a} onClick={() => setSelected(a)} />)}
+        {assets.map((a) => <Tile key={a.symbol} a={a} onClick={() => setSelected(a)}
+          fav={!!favs[a.symbol]} onFav={() => toggleFav(a.symbol)} />)}
         {!assets.length && <div className="text-muted">불러오는 중…</div>}
       </div>
 
       {selected && <AssetModal asset={selected} onClose={() => setSelected(null)} />}
+      <AssetPicker open={pickerOpen} onClose={() => setPickerOpen(false)}
+        onSelect={(a) => setSelected(a)} title="종목 검색" />
     </div>
   );
 }
 
-function Tile({ a, onClick }) {
+function Tile({ a, onClick, fav, onFav }) {
   const [spark, setSpark] = useState([]);
   useEffect(() => {
     let on = true;
@@ -99,6 +120,8 @@ function Tile({ a, onClick }) {
       <div className="flex items-start justify-between">
         <div>
           <div className="font-bold text-sm flex items-center gap-1.5">
+            <button className={fav ? 'text-warn' : 'text-border hover:text-muted'}
+              onClick={(e) => { e.stopPropagation(); onFav(); }}>★</button>
             {a.display}
             <span className="text-[9px] text-muted uppercase border border-border rounded px-1">
               {a.sub || a.category}</span>
@@ -116,7 +139,7 @@ function Tile({ a, onClick }) {
       <div className="flex justify-between text-[10px] text-muted">
         <span title="현재 펀딩 연환산">펀딩 <span className={cls(-a.funding_annual)}>
           {a.funding_annual}%</span></span>
-        <span>최근 30일 · 최대 {a.max_leverage}x</span>
+        <span title="24h 거래량">Vol {VOL(a.volume_24h)} · {a.max_leverage}x</span>
       </div>
     </div>
   );

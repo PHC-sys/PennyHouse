@@ -77,6 +77,8 @@ def fetch_universe(use_cache=True):
             prev = float(ctx.get('prevDayPx') or 0)
             funding_1h = float(ctx.get('funding') or 0)
             change = round((mark / prev - 1) * 100, 2) if prev > 0 else None
+            volume = float(ctx.get('dayNtlVlm') or 0)          # 24h 명목 거래량($)
+            oi = float(ctx.get('openInterest') or 0) * mark    # 미결제약정($ 환산)
             out.append({
                 'symbol': symbol,
                 'display': disp,
@@ -85,8 +87,11 @@ def fetch_universe(use_cache=True):
                 'dex': dex,
                 'max_leverage': int(u.get('maxLeverage', 1) or 1),
                 'price': mark,
+                'funding_1h': funding_1h,
                 'funding_annual': round(funding_1h * 24 * 365 * 100, 2),
                 'change_24h': change,
+                'volume_24h': round(volume),
+                'open_interest': round(oi),
             })
     _CACHE['uni'] = (time.time(), out)
     return out
