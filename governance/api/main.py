@@ -317,16 +317,24 @@ def create_fund(req: CreateFundReq):
 @app.get("/api/funds")
 def list_funds(user: Optional[str] = None):
     funds = store.list_funds()
-    # 참여자 수 / 최신 NAV
-    vc, nv = {}, {}
+    vc, nv, fc = {}, {}, {}
     for f in funds:
-        votes = store.get_votes(f["id"])
-        vc[f["id"]] = len(votes)
-        nav = store.get_nav(f["id"], limit=1)
-        nv[f["id"]] = nav[-1]["ret_pct"] if nav else None
+        vc[f["id"]] = len(store.get_votes(f["id"]))
+        try:
+            st = funds_engine.get_state(f)  # 라이브 수익률 + 펀딩캐리
+            nv[f["id"]] = st["fund_return_pct"]
+            fc[f["id"]] = st["funding_carry_annual_pct"]
+        except Exception:
+            nav = store.get_nav(f["id"], limit=1)
+            nv[f["id"]] = nav[-1]["ret_pct"] if nav else None
+            fc[f["id"]] = None
     mine = store.funds_for_user(user) if user else set()
 
-    out = [_fund_summary(f, vc, nv) for f in funds]
+    out = []
+    for f in funds:
+        s = _fund_summary(f, vc, nv)
+        s["funding_carry_annual_pct"] = fc.get(f["id"])
+        out.append(s)
     # 정렬: 내 펀드 → demo → 최신
     def sort_key(s):
         return (0 if s["id"] in mine else 1,

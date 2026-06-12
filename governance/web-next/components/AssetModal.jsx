@@ -41,9 +41,10 @@ export default function AssetModal({ asset, onClose }) {
   useEffect(() => {
     api(`/api/spark/${sym}?days=30`).then((d) => setVol(d.volatility)).catch(() => {});
   }, [sym]);
-  useEffect(() => {  // 펀딩 — 선택 기간 연동
-    api(`/api/funding/${sym}?days=${days}`).then((d) => setFunding(d.series)).catch(() => setFunding([]));
-  }, [sym, days]);
+  useEffect(() => {  // 펀딩 — 90일 고정(빠른 로딩, 캐시). 기간과 분리
+    setFunding([]);
+    api(`/api/funding/${sym}?days=90`).then((d) => setFunding(d.series)).catch(() => setFunding([]));
+  }, [sym]);
   useEffect(() => {
     const bSym = relAsset.symbol;
     api(`/api/relative?a=${encodeURIComponent(sym)}&b=${encodeURIComponent(bSym)}&days=${days}&interval=${interval}`)

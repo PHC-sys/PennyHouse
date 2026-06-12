@@ -92,31 +92,47 @@ export default function FundDetailPage() {
           <Stat label="펀드 자산" value={state ? fmtUsd(state.fund_equity) : '—'} />
 
           <div>
-            <div className="label">현재 포트폴리오</div>
+            <div className="flex items-center justify-between">
+              <div className="label mb-0">현재 포트폴리오</div>
+              {state?.cash_pct > 0 && <span className="text-[10px] text-muted">
+                현금(미투입) {state.cash_pct}%</span>}
+            </div>
             <table className="w-full text-[11px] mt-1">
               <thead><tr className="text-muted">
                 <th className="text-left py-1">자산</th><th className="text-right">비중</th>
                 <th className="text-right">수익률</th><th className="text-right">펀딩(연)</th>
-                <th className="text-right">평단</th><th className="text-right">청산까지</th>
+                <th className="text-right">평단</th><th className="text-right">청산가</th>
               </tr></thead>
               <tbody>
                 {uni.map((c) => {
                   const a = state?.assets?.[c] || {};
                   const w = a.weight ?? 0;
+                  const near = a.liq_dist_pct != null && a.liq_dist_pct < 10;
                   return (
                     <tr key={c} className="border-t border-border/60">
                       <td className="py-1.5 font-bold">{c.split(':').pop()}
-                        <span className={`ml-1 text-[9px] ${w >= 0 ? 'pos' : 'neg'}`}>{w >= 0 ? '롱' : '숏'}</span></td>
+                        <span className={`ml-1 text-[9px] ${w >= 0 ? 'pos' : 'neg'}`}>{w >= 0 ? '롱' : '숏'}</span>
+                        <span className="ml-1 text-[8px] text-muted">{a.quote}·{a.eff_leverage}x</span></td>
                       <td className={`text-right stat-num ${cls(w)}`}>{w > 0 ? '+' : ''}{w}%</td>
                       <td className={`text-right stat-num ${cls(a.return_pct)}`}>{a.return_pct != null ? fmtPct(a.return_pct) : '—'}</td>
                       <td className={`text-right stat-num ${cls(a.funding_carry)}`}>{a.funding_carry != null ? fmtPct(a.funding_carry) : '—'}</td>
                       <td className="text-right stat-num text-muted">{a.avg_entry != null ? smartNum(a.avg_entry) : '—'}</td>
-                      <td className="text-right stat-num">{a.liq_dist_pct != null
-                        ? <span className={a.liq_dist_pct < 10 ? 'neg' : 'text-muted'}>{a.liq_dist_pct}%</span>
-                        : <span className="text-muted">—</span>}</td>
+                      <td className="text-right stat-num" title={a.liq_dist_pct != null ? `현재가 대비 ${a.liq_dist_pct}%` : ''}>
+                        {a.liq_price != null
+                          ? <span className={near ? 'neg' : 'text-muted'}>{smartNum(a.liq_price)}
+                              <span className="text-[8px] ml-0.5">({a.liq_dist_pct}%)</span></span>
+                          : <span className="text-muted">—</span>}</td>
                     </tr>
                   );
                 })}
+                {state?.cash_pct > 0 && (
+                  <tr className="border-t border-border/60 text-muted">
+                    <td className="py-1.5 font-bold">CASH <span className="text-[8px]">안전</span></td>
+                    <td className="text-right stat-num">{state.cash_pct}%</td>
+                    <td className="text-right">—</td><td className="text-right">—</td>
+                    <td className="text-right">—</td><td className="text-right">—</td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>

@@ -64,7 +64,7 @@ export default function AssetPicker({ open, onClose, onSelect, title = '자산 �
   useEffect(() => { if (cursor >= filtered.length) setCursor(0); }, [filtered, cursor]);
 
   function onKey(e) {
-    if (e.key === 'Escape') return onClose();
+    if (e.key === 'Escape') { e.stopPropagation(); e.preventDefault(); return onClose(); }
     if (e.key === 'ArrowDown') { e.preventDefault(); setCursor((c) => Math.min(c + 1, filtered.length - 1)); }
     if (e.key === 'ArrowUp') { e.preventDefault(); setCursor((c) => Math.max(c - 1, 0)); }
     if (e.key === 'Enter') { e.preventDefault(); const a = filtered[cursor]; if (a) { onSelect(a); onClose(); } }

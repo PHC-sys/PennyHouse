@@ -57,9 +57,15 @@ export default function FundListPage() {
                   <Badge>{f.profile === 'aggressive' ? '5x' : f.profile === 'conservative' ? '2x' : '1x'}</Badge>
                 </div>
               </div>
-              {f.nav_ret_pct != null && (
-                <div className={`stat-num font-bold ${cls(f.nav_ret_pct)}`}>{fmtPct(f.nav_ret_pct)}</div>
-              )}
+              <div className="text-right">
+                {f.nav_ret_pct != null && (
+                  <div className={`stat-num font-bold ${cls(f.nav_ret_pct)}`}>{fmtPct(f.nav_ret_pct)}</div>
+                )}
+                {f.funding_carry_annual_pct != null && (
+                  <div className="text-[10px] text-muted">펀딩 <span className={cls(f.funding_carry_annual_pct)}>
+                    {fmtPct(f.funding_carry_annual_pct)}</span></div>
+                )}
+              </div>
             </div>
             <div className="flex justify-between text-xs text-muted">
               <span>자산 {f.universe.length}종</span>

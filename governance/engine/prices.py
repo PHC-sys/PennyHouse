@@ -132,6 +132,10 @@ def fetch_current_prices(coins=None):
     return _live_cached(('mids', tuple(coins)), _LIVE_TTL, _f)
 
 
+_FUNDING_CACHE = {}
+_FUNDING_TTL = 600  # 10분 (펀딩은 자주 안 변함)
+
+
 def fetch_funding_history(coin, days=90):
     """
     HL fundingHistory로 펀딩비 시계열 수집.
@@ -142,6 +146,11 @@ def fetch_funding_history(coin, days=90):
         fundingRate = 1시간 지급요율. 연환산 = ×24×365.
         ※ HL 보관 기간/상장 시점까지만 — 요청보다 짧을 수 있음(정상).
     """
+    ck = (coin, days)
+    hit = _FUNDING_CACHE.get(ck)
+    if hit and time.time() - hit[0] < _FUNDING_TTL:
+        return hit[1].copy()
+
     end_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
     start_ms = end_ms - days * 86_400_000
     all_rows = []
@@ -172,7 +181,9 @@ def fetch_funding_history(coin, days=90):
     df = pd.DataFrame(all_rows)
     df['time'] = pd.to_datetime(df['time'], unit='ms', utc=True)
     df['fundingRate'] = df['fundingRate'].astype(float)
-    return df.drop_duplicates('time')[['time', 'fundingRate']].set_index('time').sort_index()
+    df = df.drop_duplicates('time')[['time', 'fundingRate']].set_index('time').sort_index()
+    _FUNDING_CACHE[ck] = (time.time(), df.copy())
+    return df
 
 
 def fetch_current_funding(coins=None):

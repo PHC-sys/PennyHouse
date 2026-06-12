@@ -92,6 +92,23 @@ def _leverage(fund):
     return FUND_PROFILES[fund['profile']]['FUND_LEVERAGE']
 
 
+_reg_cache = {'ts': 0, 'data': {}}
+
+
+def _registry():
+    """자산 레지스트리 맵 (60초 캐시)."""
+    if time.time() - _reg_cache['ts'] > 60:
+        _reg_cache['data'] = {a['symbol']: a for a in fetch_universe()}
+        _reg_cache['ts'] = time.time()
+    return _reg_cache['data']
+
+
+def _eff_lev(fund_lev, symbol, reg):
+    """자산별 유효 레버리지 = min(펀드 레버리지, 자산 최대 레버리지)."""
+    amax = reg.get(symbol, {}).get('max_leverage') or fund_lev
+    return min(fund_lev, amax)
+
+
 def _mark_to_market(fund):
     """라이브 가격으로 평가 → equity + 코인별 손익."""
     fid = fund['id']
@@ -102,13 +119,15 @@ def _mark_to_market(fund):
         return
     last = rt['last_prices']
     lev = _leverage(fund)
+    reg = _registry()
     if last:
         eq = rt['equity']
         total = 0.0
         for c in uni:
             if c in prices and c in last and last[c] > 0:
                 ret = prices[c] / last[c] - 1
-                pnl = (rt['weights'][c] / 100) * eq * lev * ret
+                elev = _eff_lev(lev, c, reg)  # 자산 한도 캡
+                pnl = (rt['weights'][c] / 100) * eq * elev * ret
                 rt['asset_pnl'][c] += pnl
                 total += pnl
         rt['equity'] = max(eq + total, 0)
@@ -144,12 +163,8 @@ def get_state(fund):
         eq = rt['equity']
         lev = _leverage(fund)
         prices = rt['last_prices']
-        # 레지스트리에서 펀딩/레버리지 (HIP-3 포함 전 자산 커버)
+        # 레지스트리에서 펀딩/레버리지/결제통화 (HIP-3 포함 전 자산 커버)
         reg = {a['symbol']: a for a in fetch_universe()}
-        meta = {}
-        for c in uni:
-            mx = reg.get(c, {}).get('max_leverage', 1) or 1
-            meta[c] = {'max_leverage': mx, 'mmr': round(1 / (2 * mx), 5)}
 
         votes = store.get_votes(fund['id'])
         total_dep = sum(v['deposit'] for v in votes) or 0
@@ -166,16 +181,20 @@ def get_state(fund):
 
         carry_annual = 0.0
         assets = {}
+        gross = 0.0
         for c in uni:
             w = rt['weights'][c]
+            gross += abs(w)
+            amax = reg.get(c, {}).get('max_leverage') or lev
+            elev = min(lev, amax)                 # 자산 한도 캡
+            mmr = 1 / (2 * amax)                  # HL 공식 = 1/(2×maxLev)
             ann = reg.get(c, {}).get('funding_annual', 0)
-            contrib = -(w / 100) * lev * ann
+            contrib = -(w / 100) * elev * ann
             carry_annual += contrib
             entry = rt['avg_entry'][c]
             side = 'long' if w >= 0 else 'short'
-            mmr = meta.get(c, {}).get('mmr', 0.02)
-            liq = (liquidation_price(entry, lev, side, mmr)
-                   if entry and abs(w) > 1e-9 and lev > 1 else None)
+            liq = (liquidation_price(entry, elev, side, mmr)
+                   if entry and abs(w) > 1e-9 and elev > 1 else None)
             px = prices.get(c)
             liq_dist = round(abs(px - liq) / px * 100, 1) if liq and px else None
             assets[c] = {
@@ -185,8 +204,11 @@ def get_state(fund):
                 'avg_entry': round(entry, 4) if entry else None,
                 'price': px, 'liq_price': round(liq, 4) if liq else None,
                 'liq_dist_pct': liq_dist,
-                'max_leverage': meta.get(c, {}).get('max_leverage'),
+                'max_leverage': amax, 'eff_leverage': elev,
+                'quote': reg.get(c, {}).get('quote', 'USDC'),
             }
+
+        cash_pct = round(max(0.0, 100 - gross), 1)  # 미투입(현금) 비중
 
         nav = store.get_nav(fund['id'], limit=300)
         return {
@@ -195,6 +217,7 @@ def get_state(fund):
             'leverage': lev, 'fund_equity': round(eq, 2),
             'fund_return_pct': round((eq / rt['initial'] - 1) * 100, 2),
             'funding_carry_annual_pct': round(carry_annual, 2),
+            'cash_pct': cash_pct,
             'weights': {c: round(rt['weights'][c], 1) for c in uni},
             'target': (None if rt['last_target'] is None
                        else {c: round(rt['last_target'][c], 1) for c in uni}),

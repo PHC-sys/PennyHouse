@@ -31,6 +31,17 @@ _INDICES = {'SP500', 'XYZ100', 'NIFTY', 'KR200', 'JP225', 'IBOV', 'VIX', 'VOL',
 
 _CACHE = {}
 _TTL = 120  # 2분
+_TOKEN_MAP = {}  # 토큰 인덱스 → 이름 (USDC/USDH...)
+
+
+def _token_name(idx):
+    """결제통화 인덱스 → 이름 (spotMeta 캐시)."""
+    if not _TOKEN_MAP:
+        sm = _post({'type': 'spotMeta'})
+        if sm and 'tokens' in sm:
+            for t in sm['tokens']:
+                _TOKEN_MAP[t['index']] = t['name']
+    return _TOKEN_MAP.get(idx, 'USDC')
 
 
 def _subcategory(dex, raw_name):
@@ -67,6 +78,7 @@ def fetch_universe(use_cache=True):
         if not isinstance(data, list) or len(data) < 2:
             continue
         universe, ctxs = data[0]['universe'], data[1]
+        quote = _token_name(data[0].get('collateralToken', 0))  # dex 결제통화
         for i, u in enumerate(universe):
             if u.get('isDelisted'):
                 continue
@@ -87,6 +99,7 @@ def fetch_universe(use_cache=True):
                 'sub': _subcategory(dex, disp),
                 'dex': dex,
                 'max_leverage': int(u.get('maxLeverage', 1) or 1),
+                'quote': quote,            # 결제 스테이블코인 (USDC/USDH)
                 'price': mark,
                 'funding_1h': funding_1h,
                 'funding_annual': round(funding_1h * 24 * 365 * 100, 2),
