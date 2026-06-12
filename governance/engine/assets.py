@@ -14,20 +14,25 @@ import numpy as np
 from concurrent.futures import ThreadPoolExecutor
 from .prices import HL_API, _post, fetch_candles
 
-# 다룰 dex 소스 (메인=None) → 대분류
-DEX_SOURCES = [
-    (None,   'crypto'),
-    ('xyz',  'tradfi'),
-    ('vntl', 'preipo'),
-]
+# 전 dex → 대분류 (중복 자산은 거래량 큰 dex로 통합)
+DEX_CATEGORY = {
+    None: 'crypto', 'hyna': 'crypto', 'para': 'crypto',
+    'xyz': 'tradfi', 'flx': 'tradfi', 'km': 'tradfi', 'cash': 'tradfi',
+    'vntl': 'preipo',
+}
 
-# TradFi(xyz) 세부 분류용 키워드
-_COMMODITIES = {'GOLD', 'SILVER', 'PLATINUM', 'PALLADIUM', 'COPPER', 'ALUMINIUM',
-                'BRENTOIL', 'CL', 'NATGAS', 'CORN', 'WHEAT', 'URANIUM', 'URNM',
-                'TTF', 'SOY'}
-_FX = {'EUR', 'GBP', 'JPY', 'KRW', 'NOK', 'DXY'}
-_INDICES = {'SP500', 'XYZ100', 'NIFTY', 'KR200', 'JP225', 'IBOV', 'VIX', 'VOL',
-            'EWY', 'EWZ', 'EWJ', 'EWT', 'XLE', 'USTECH', 'US500', 'USA100', 'USA500'}
+# TradFi 세부 분류 키워드 (전 dex 자산 대응, 촘촘하게)
+_COMMODITIES = {
+    'GOLD', 'SILVER', 'PLATINUM', 'PALLADIUM', 'COPPER', 'ALUMINIUM',
+    'OIL', 'WTI', 'WTIOIL', 'USOIL', 'BRENTOIL', 'CL', 'GAS', 'NATGAS',
+    'CORN', 'WHEAT', 'SOY', 'URANIUM', 'URNM', 'TTF', 'GLDMINE', 'USENERGY',
+}
+_FX = {'EUR', 'GBP', 'JPY', 'KRW', 'NOK', 'DXY', 'USDE'}
+_INDICES = {
+    'SP500', 'US500', 'USA500', 'USA100', 'USTECH', 'USBOND', 'SMALL2000',
+    'XYZ100', 'NIFTY', 'KR200', 'JP225', 'IBOV', 'VIX', 'VOL', 'KWEB',
+    'EWY', 'EWZ', 'EWJ', 'EWT', 'XLE', 'BTCD', 'TOTAL2', 'OTHERS',
+}
 
 _CACHE = {}
 _TTL = 120  # 2분
@@ -44,11 +49,13 @@ def _token_name(idx):
     return _TOKEN_MAP.get(idx, 'USDC')
 
 
-def _subcategory(dex, raw_name):
-    """xyz(tradfi) 내 세부 분류."""
-    if dex != 'xyz':
-        return None
+def _subcategory(category, raw_name):
+    """대분류 내 세부 분류 (tradfi/preipo만 세분)."""
     n = raw_name.upper()
+    if category == 'preipo':
+        return None
+    if category != 'tradfi':
+        return None
     if n in _COMMODITIES:
         return 'commodity'
     if n in _FX:
@@ -69,8 +76,11 @@ def fetch_universe(use_cache=True):
     if use_cache and 'uni' in _CACHE and time.time() - _CACHE['uni'][0] < _TTL:
         return _CACHE['uni'][1]
 
-    out = []
-    for dex, category in DEX_SOURCES:
+    rows = []
+    # 전 dex 수집 (perpDexs로 동적 발견 + 메인)
+    dexs = _post({'type': 'perpDexs'}) or []
+    dex_names = [None] + [d['name'] for d in dexs if d and isinstance(d, dict)]
+    for dex in dex_names:
         payload = {'type': 'metaAndAssetCtxs'}
         if dex:
             payload['dex'] = dex
@@ -78,35 +88,40 @@ def fetch_universe(use_cache=True):
         if not isinstance(data, list) or len(data) < 2:
             continue
         universe, ctxs = data[0]['universe'], data[1]
-        quote = _token_name(data[0].get('collateralToken', 0))  # dex 결제통화
+        quote = _token_name(data[0].get('collateralToken', 0))
+        category = DEX_CATEGORY.get(dex, 'crypto')
         for i, u in enumerate(universe):
             if u.get('isDelisted'):
                 continue
             raw = u['name']
-            symbol = raw if dex is None else raw  # 이미 prefix 포함됨
             disp = raw.split(':')[-1]
             ctx = ctxs[i] if i < len(ctxs) else {}
             mark = float(ctx.get('markPx') or 0)
             prev = float(ctx.get('prevDayPx') or 0)
             funding_1h = float(ctx.get('funding') or 0)
             change = round((mark / prev - 1) * 100, 2) if prev > 0 else None
-            volume = float(ctx.get('dayNtlVlm') or 0)          # 24h 명목 거래량($)
-            oi = float(ctx.get('openInterest') or 0) * mark    # 미결제약정($ 환산)
-            out.append({
-                'symbol': symbol,
-                'display': disp,
-                'category': category,
-                'sub': _subcategory(dex, disp),
-                'dex': dex,
+            volume = float(ctx.get('dayNtlVlm') or 0)
+            oi = float(ctx.get('openInterest') or 0) * mark
+            rows.append({
+                'symbol': raw, 'display': disp,
+                'category': category, 'sub': _subcategory(category, disp),
+                'dex': dex or 'main',
                 'max_leverage': int(u.get('maxLeverage', 1) or 1),
-                'quote': quote,            # 결제 스테이블코인 (USDC/USDH)
-                'price': mark,
-                'funding_1h': funding_1h,
+                'quote': quote, 'price': mark, 'funding_1h': funding_1h,
                 'funding_annual': round(funding_1h * 24 * 365 * 100, 2),
                 'change_24h': change,
-                'volume_24h': round(volume),
-                'open_interest': round(oi),
+                'volume_24h': round(volume), 'open_interest': round(oi),
             })
+
+    # 중복 자산(같은 display)은 거래량 큰 dex만 대표로 (메인 dex 우선 가중)
+    best = {}
+    for r in rows:
+        key = r['display']
+        score = r['volume_24h'] + (1e15 if r['dex'] == 'main' else 0)  # 메인 우선
+        if key not in best or score > best[key][0]:
+            best[key] = (score, r)
+    out = [v[1] for v in best.values()]
+    out.sort(key=lambda r: -r['volume_24h'])
     _CACHE['uni'] = (time.time(), out)
     return out
 
