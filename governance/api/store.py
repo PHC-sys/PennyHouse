@@ -146,6 +146,21 @@ def append_nav(fund_id, t, value, ret_pct):
         c.execute("INSERT INTO nav_history VALUES (?,?,?,?)", (fund_id, t, value, ret_pct))
 
 
+def upsert_nav_minute(fund_id, value, ret_pct):
+    """분 단위 NAV 기록 — 같은 분은 덮어쓰기 (규칙적 시계열)."""
+    import time as _t
+    minute = int(_t.time() // 60) * 60
+    with _lock, _conn() as c:
+        row = c.execute("SELECT 1 FROM nav_history WHERE fund_id=? AND t=?",
+                        (fund_id, minute)).fetchone()
+        if row:
+            c.execute("UPDATE nav_history SET value=?, ret_pct=? WHERE fund_id=? AND t=?",
+                      (value, ret_pct, fund_id, minute))
+        else:
+            c.execute("INSERT INTO nav_history VALUES (?,?,?,?)",
+                      (fund_id, minute, value, ret_pct))
+
+
 def get_nav(fund_id, limit=300):
     with _lock, _conn() as c:
         rows = c.execute("SELECT t,value,ret_pct FROM nav_history WHERE fund_id=? "

@@ -145,6 +145,10 @@ def _mark_to_market(fund):
     for c in uni:
         if rt['avg_entry'][c] is None and abs(rt['weights'][c]) > 1e-9 and c in prices:
             rt['avg_entry'][c] = prices[c]
+    # 분 단위 NAV 기록 (규칙적 시계열, 같은 분 덮어쓰기)
+    eq = rt['equity']
+    store.upsert_nav_minute(fund['id'], round(eq, 2),
+                            round((eq / rt['initial'] - 1) * 100, 4))
 
 
 def submit_vote(fund, user, deposit, votes):
@@ -156,8 +160,7 @@ def submit_vote(fund, user, deposit, votes):
         store.upsert_vote(fund['id'], user, float(deposit), votes)
         _rt(fund)
         _aggregate(fund)
-        _mark_to_market(fund)
-        _snapshot_nav(fund)
+        _mark_to_market(fund)  # 내부에서 분 단위 NAV 기록
 
 
 def _snapshot_nav(fund):
