@@ -26,16 +26,21 @@ _COMMODITIES = {
     'GOLD', 'SILVER', 'PLATINUM', 'PALLADIUM', 'COPPER', 'ALUMINIUM',
     'OIL', 'WTI', 'WTIOIL', 'USOIL', 'BRENTOIL', 'CL', 'GAS', 'NATGAS',
     'CORN', 'WHEAT', 'SOY', 'URANIUM', 'URNM', 'TTF', 'GLDMINE', 'USENERGY',
+    'GOLDJM', 'SILVERJM',
 }
-_FX = {'EUR', 'GBP', 'JPY', 'KRW', 'NOK', 'DXY', 'USDE'}
+_FX = {'EUR', 'GBP', 'JPY', 'KRW', 'NOK', 'DXY'}  # USDE는 합성달러라 제외
 _INDICES = {
     'SP500', 'US500', 'USA500', 'USA100', 'USTECH', 'USBOND', 'SMALL2000',
     'XYZ100', 'NIFTY', 'KR200', 'JP225', 'IBOV', 'VIX', 'VOL', 'KWEB',
     'EWY', 'EWZ', 'EWJ', 'EWT', 'XLE',
+    # vntl 테마 바스켓 = 섹터 지수
+    'MAG7', 'SEMIS', 'DEFENSE', 'NUCLEAR', 'ROBOT', 'INFOTECH', 'BIOTECH', 'ENERGY',
 }  # BTCD/TOTAL2/OTHERS(크립토 지수)는 crypto로 둠
+# 실제 Pre-IPO/비상장 기업만
+_PREIPO = {'SPACEX', 'OPENAI', 'ANTHROPIC', 'SPCX', 'QNT'}
 
 _CACHE = {}
-_TTL = 120  # 2분
+_TTL = 300  # 5분 (라이브 가격은 별도 워커, 레지스트리는 자주 안 변함)
 _TOKEN_MAP = {}  # 토큰 인덱스 → 이름 (USDC/USDH...)
 
 
@@ -56,6 +61,8 @@ def _classify(dex, display):
     Returns: (category, sub)
     """
     n = display.upper()
+    if n in _PREIPO:
+        return 'preipo', None
     if n in _COMMODITIES:
         return 'tradfi', 'commodity'
     if n in _FX:
@@ -82,14 +89,20 @@ def fetch_universe(use_cache=True):
         return _CACHE['uni'][1]
 
     rows = []
-    # 전 dex 수집 (perpDexs로 동적 발견 + 메인)
+    # 전 dex 수집 (perpDexs로 동적 발견 + 메인) — 병렬 호출로 로딩 단축
     dexs = _post({'type': 'perpDexs'}) or []
     dex_names = [None] + [d['name'] for d in dexs if d and isinstance(d, dict)]
-    for dex in dex_names:
+
+    def _fetch_dex(dex):
         payload = {'type': 'metaAndAssetCtxs'}
         if dex:
             payload['dex'] = dex
-        data = _post(payload)
+        return dex, _post(payload)
+
+    with ThreadPoolExecutor(max_workers=10) as ex:
+        results = list(ex.map(_fetch_dex, dex_names))
+
+    for dex, data in results:
         if not isinstance(data, list) or len(data) < 2:
             continue
         universe, ctxs = data[0]['universe'], data[1]

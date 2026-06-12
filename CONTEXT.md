@@ -269,6 +269,11 @@ API: POST/GET/DELETE /api/funds, GET /api/funds/{id},
 현금: 투표에 cash(0~100), 종목 target을 (100-cash)로 스케일. state target_cash_pct/cash_pct.
 레버리지: 자산별 유효레버 min(펀드,자산max), mmr=1/(2×자산max). 청산은 절대가격.
 결제통화: 레지스트리 quote(메인+xyz=USDC, vntl=USDH). 잔고체크는 Keeper 단계.
+자산 레지스트리: 전 dex(perpDexs 동적, 병렬호출) 283개, 중복은 거래량 큰 dex로 통합.
+  분류는 키워드 우선→dex 폴백(_classify). 카테고리 crypto/tradfi(stock/index/commodity/fx)/preipo.
+  Pre-IPO=실제 비상장만(SPACEX/OPENAI/ANTHROPIC/SPCX/QNT), 테마바스켓(MAG7/SEMIS등)=index.
+  마켓·팔레트 탭 HL식 세분화(주식/지수/원자재/FX). 펀드개설 팔레트 분류 일괄추가.
+  ※ 거래량 0(죽은 마켓) 자산 제외는 추후.
 NAV: 분 단위 upsert(같은 분 덮어쓰기) SQLite 영속.
 ※ 구 단일 paper.py·정적 web/ 제거 완료. 프론트는 web-next(:3010)만.
 

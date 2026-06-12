@@ -432,6 +432,8 @@ cd governance/web-next && npm install && npm run dev   # → http://localhost:30
 | 2026-06-11 | [Note/20260611(GovernanceFund_Platform_Sprint).md](Note/20260611(GovernanceFund_Platform_Sprint).md) | 플랫폼 스프린트 개발일지 (결정·이유·트러블슈팅) |
 | 2026-06-11 | [governance/api/store.py](governance/api/store.py), [funds.py](governance/api/funds.py) | 3차 멀티펀드 완료: 펀드 개설/목록/상세, 현금투표, 자산별 레버캡/결제통화, 라이브 NAV |
 | 2026-06-11 | governance/ 정리 | 구 단일 paper.py·정적 web/ 제거, 차트 시간축, 프론트는 web-next로 일원화 |
+| 2026-06-11 | [governance/api/live.py](governance/api/live.py) | 거래소급 라이브 ctx(activeAssetCtx): 펀딩/OI/거래량 실시간 + 정산 카운트다운 |
+| 2026-06-11 | [governance/engine/assets.py](governance/engine/assets.py) | 전 dex 통합(283개)·중복제거·키워드 우선 분류·HL식 세분화 탭·병렬 로딩 |
 
 설계 참고 문서:
 

@@ -102,7 +102,9 @@ export default function AssetPicker({ open, onClose, onSelect, onAddAll, title =
           {onAddAll && tab !== 'all' && filtered.length > 0 && (
             <button className="chip chip-active ml-auto"
               onClick={() => onAddAll(filtered.slice(0, 30))}>
-              + 이 분류 {Math.min(filtered.length, 30)}개 전체 추가</button>
+              {filtered.length <= 30
+                ? `+ 이 분류 ${filtered.length}개 전체 추가`
+                : `+ 거래량 상위 30개 추가 (전체 ${filtered.length})`}</button>
           )}
         </div>
         {/* 리스트 */}
