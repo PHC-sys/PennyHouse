@@ -31,8 +31,8 @@ _FX = {'EUR', 'GBP', 'JPY', 'KRW', 'NOK', 'DXY', 'USDE'}
 _INDICES = {
     'SP500', 'US500', 'USA500', 'USA100', 'USTECH', 'USBOND', 'SMALL2000',
     'XYZ100', 'NIFTY', 'KR200', 'JP225', 'IBOV', 'VIX', 'VOL', 'KWEB',
-    'EWY', 'EWZ', 'EWJ', 'EWT', 'XLE', 'BTCD', 'TOTAL2', 'OTHERS',
-}
+    'EWY', 'EWZ', 'EWJ', 'EWT', 'XLE',
+}  # BTCD/TOTAL2/OTHERS(크립토 지수)는 crypto로 둠
 
 _CACHE = {}
 _TTL = 120  # 2분
@@ -49,20 +49,25 @@ def _token_name(idx):
     return _TOKEN_MAP.get(idx, 'USDC')
 
 
-def _subcategory(category, raw_name):
-    """대분류 내 세부 분류 (tradfi/preipo만 세분)."""
-    n = raw_name.upper()
-    if category == 'preipo':
-        return None
-    if category != 'tradfi':
-        return None
+def _classify(dex, display):
+    """
+    자산 분류 — 키워드 우선, dex 폴백.
+    (vntl처럼 한 dex에 Pre-IPO+원자재가 섞인 경우 키워드로 정확히 분류)
+    Returns: (category, sub)
+    """
+    n = display.upper()
     if n in _COMMODITIES:
-        return 'commodity'
+        return 'tradfi', 'commodity'
     if n in _FX:
-        return 'fx'
+        return 'tradfi', 'fx'
     if n in _INDICES:
-        return 'index'
-    return 'stock'
+        return 'tradfi', 'index'
+    # 키워드 미매치 → dex 기준
+    if dex in ('xyz', 'flx', 'km', 'cash'):
+        return 'tradfi', 'stock'
+    if dex == 'vntl':
+        return 'preipo', None
+    return 'crypto', None  # main, hyna, para 등
 
 
 def fetch_universe(use_cache=True):
@@ -89,12 +94,12 @@ def fetch_universe(use_cache=True):
             continue
         universe, ctxs = data[0]['universe'], data[1]
         quote = _token_name(data[0].get('collateralToken', 0))
-        category = DEX_CATEGORY.get(dex, 'crypto')
         for i, u in enumerate(universe):
             if u.get('isDelisted'):
                 continue
             raw = u['name']
             disp = raw.split(':')[-1]
+            category, sub = _classify(dex, disp)
             ctx = ctxs[i] if i < len(ctxs) else {}
             mark = float(ctx.get('markPx') or 0)
             prev = float(ctx.get('prevDayPx') or 0)
@@ -104,7 +109,7 @@ def fetch_universe(use_cache=True):
             oi = float(ctx.get('openInterest') or 0) * mark
             rows.append({
                 'symbol': raw, 'display': disp,
-                'category': category, 'sub': _subcategory(category, disp),
+                'category': category, 'sub': sub,
                 'dex': dex or 'main',
                 'max_leverage': int(u.get('maxLeverage', 1) or 1),
                 'quote': quote, 'price': mark, 'funding_1h': funding_1h,
@@ -113,14 +118,13 @@ def fetch_universe(use_cache=True):
                 'volume_24h': round(volume), 'open_interest': round(oi),
             })
 
-    # 중복 자산(같은 display)은 거래량 큰 dex만 대표로 (메인 dex 우선 가중)
+    # 중복 자산(같은 display)은 거래량 큰 dex만 대표로 (순수 거래량 기준)
     best = {}
     for r in rows:
         key = r['display']
-        score = r['volume_24h'] + (1e15 if r['dex'] == 'main' else 0)  # 메인 우선
-        if key not in best or score > best[key][0]:
-            best[key] = (score, r)
-    out = [v[1] for v in best.values()]
+        if key not in best or r['volume_24h'] > best[key]['volume_24h']:
+            best[key] = r
+    out = list(best.values())
     out.sort(key=lambda r: -r['volume_24h'])
     _CACHE['uni'] = (time.time(), out)
     return out
