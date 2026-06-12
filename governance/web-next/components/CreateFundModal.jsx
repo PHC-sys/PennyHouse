@@ -25,6 +25,13 @@ export default function CreateFundModal({ me, onClose, onCreated }) {
   function addAsset(a) {
     setUniverse((u) => u.includes(a.symbol) ? u : [...u, a.symbol]);
   }
+  function addMany(list) {
+    setUniverse((u) => {
+      const set = new Set(u);
+      list.forEach((a) => set.add(a.symbol));
+      return [...set];
+    });
+  }
   function removeAsset(s) { setUniverse((u) => u.filter((x) => x !== s)); }
 
   async function submit() {
@@ -109,7 +116,7 @@ export default function CreateFundModal({ me, onClose, onCreated }) {
         </div>
       </div>
       <AssetPicker open={pickerOpen} onClose={() => setPickerOpen(false)}
-        onSelect={addAsset} title="운용 자산 추가" />
+        onSelect={addAsset} onAddAll={addMany} title="운용 자산 추가" />
     </div>
   );
 }

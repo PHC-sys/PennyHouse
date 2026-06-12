@@ -3,10 +3,13 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { api, cls, smartNum } from '@/components/api';
 
 const TABS = [
-  { key: 'all', label: 'All' },
-  { key: 'crypto', label: 'Crypto' },
-  { key: 'tradfi', label: 'TradFi' },
-  { key: 'preipo', label: 'Pre-IPO' },
+  { key: 'all',               label: 'All' },
+  { key: 'crypto',            label: '크립토' },
+  { key: 'tradfi:stock',     label: '주식' },
+  { key: 'tradfi:index',     label: '지수' },
+  { key: 'tradfi:commodity', label: '원자재' },
+  { key: 'tradfi:fx',        label: 'FX' },
+  { key: 'preipo',            label: 'Pre-IPO' },
 ];
 const FMT = smartNum;
 const VOL = (v) => !v ? '—' : v >= 1e9 ? (v / 1e9).toFixed(1) + 'B'
@@ -29,7 +32,7 @@ function useFavs() {
  * 커맨드 팔레트형 자산 선택기.
  * props: open, onClose, onSelect(asset), title
  */
-export default function AssetPicker({ open, onClose, onSelect, title = '자산 검색' }) {
+export default function AssetPicker({ open, onClose, onSelect, onAddAll, title = '자산 검색' }) {
   const [assets, setAssets] = useState([]);
   const [q, setQ] = useState('');
   const [tab, setTab] = useState('all');
@@ -48,12 +51,14 @@ export default function AssetPicker({ open, onClose, onSelect, title = '자산 �
 
   const filtered = useMemo(() => {
     let list = assets;
-    if (tab !== 'all') list = list.filter((a) => a.category === tab);
+    if (tab !== 'all') {
+      const [cat, sub] = tab.split(':');
+      list = list.filter((a) => a.category === cat && (!sub || a.sub === sub));
+    }
     if (q) {
       const u = q.toUpperCase();
       list = list.filter((a) => a.display.toUpperCase().includes(u));
     }
-    // 즐겨찾기 우선 → 거래량 순
     return [...list].sort((a, b) => {
       const fa = favs[a.symbol] ? 1 : 0, fb = favs[b.symbol] ? 1 : 0;
       if (fa !== fb) return fb - fa;
@@ -67,7 +72,7 @@ export default function AssetPicker({ open, onClose, onSelect, title = '자산 �
     if (e.key === 'Escape') { e.stopPropagation(); e.preventDefault(); return onClose(); }
     if (e.key === 'ArrowDown') { e.preventDefault(); setCursor((c) => Math.min(c + 1, filtered.length - 1)); }
     if (e.key === 'ArrowUp') { e.preventDefault(); setCursor((c) => Math.max(c - 1, 0)); }
-    if (e.key === 'Enter') { e.preventDefault(); const a = filtered[cursor]; if (a) { onSelect(a); onClose(); } }
+    if (e.key === 'Enter') { e.preventDefault(); const a = filtered[cursor]; if (a) { onSelect(a); if (!onAddAll) onClose(); } }
   }
   useEffect(() => {
     const el = listRef.current?.children[cursor];
@@ -89,11 +94,16 @@ export default function AssetPicker({ open, onClose, onSelect, title = '자산 �
           <kbd className="text-[10px] text-muted border border-border rounded px-1.5 py-0.5">ESC</kbd>
         </div>
         {/* 탭 */}
-        <div className="flex gap-1.5 px-4 py-2 border-b border-border">
+        <div className="flex items-center gap-1.5 px-4 py-2 border-b border-border flex-wrap">
           {TABS.map((t) => (
             <span key={t.key} className={`chip ${tab === t.key ? 'chip-active' : ''}`}
               onClick={() => { setTab(t.key); setCursor(0); }}>{t.label}</span>
           ))}
+          {onAddAll && tab !== 'all' && filtered.length > 0 && (
+            <button className="chip chip-active ml-auto"
+              onClick={() => onAddAll(filtered.slice(0, 30))}>
+              + 이 분류 {Math.min(filtered.length, 30)}개 전체 추가</button>
+          )}
         </div>
         {/* 리스트 */}
         <div ref={listRef} className="max-h-[52vh] overflow-y-auto">
@@ -102,7 +112,7 @@ export default function AssetPicker({ open, onClose, onSelect, title = '자산 �
               className={`flex items-center gap-3 px-4 py-2 cursor-pointer text-sm
                 ${i === cursor ? 'bg-card' : 'hover:bg-card/60'}`}
               onMouseEnter={() => setCursor(i)}
-              onClick={() => { onSelect(a); onClose(); }}>
+              onClick={() => { onSelect(a); if (!onAddAll) onClose(); }}>
               <button className={favs[a.symbol] ? 'text-warn' : 'text-border hover:text-muted'}
                 onClick={(e) => { e.stopPropagation(); toggleFav(a.symbol); }}>★</button>
               <span className="font-bold w-24">{a.display}
