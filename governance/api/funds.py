@@ -67,9 +67,19 @@ def _aggregate(fund):
     if not votes:
         return
     profile = FUND_PROFILES[fund['profile']]
+    # 현금 보유 비율 = 참여자 cash 투표의 예치금 가중평균 (0~100)
+    total_dep = sum(v['deposit'] for v in votes) or 1
+    cash_pct = sum(v['deposit'] * float(v['votes'].get('_cash', 0)) for v in votes) / total_dep
+    cash_pct = max(0.0, min(100.0, cash_pct))
+    rt['target_cash'] = cash_pct
+
     vr = simulate_votes(votes, uni)
     vol_map = {c: _vol(c) for c in uni}
     target = votes_to_target(vr, uni, vol_map)
+    if target is not None:
+        # 종목 비중은 (100-cash)로 스케일 → 나머지는 현금
+        scale = (100.0 - cash_pct) / 100.0
+        target = {c: target[c] * scale for c in uni}
     rt['last_target'] = target
     if target is None:
         return
@@ -139,7 +149,9 @@ def _mark_to_market(fund):
 
 def submit_vote(fund, user, deposit, votes):
     uni = fund['universe']
+    cash = max(0.0, min(100.0, float(votes.get('cash', 0) or 0)))
     votes = {c: int(votes.get(c, 0)) for c in uni}
+    votes['_cash'] = cash  # 현금 보유 비율(투표)
     with _lock:
         store.upsert_vote(fund['id'], user, float(deposit), votes)
         _rt(fund)
@@ -208,7 +220,9 @@ def get_state(fund):
                 'quote': reg.get(c, {}).get('quote', 'USDC'),
             }
 
-        cash_pct = round(max(0.0, 100 - gross), 1)  # 미투입(현금) 비중
+        # 현금: 투표로 정한 목표(target_cash)와 실제 미투입(100-gross) 모두 제공
+        cash_pct = round(max(0.0, 100 - gross), 1)
+        target_cash = round(rt.get('target_cash', 0.0), 1)
 
         nav = store.get_nav(fund['id'], limit=300)
         return {
@@ -217,7 +231,7 @@ def get_state(fund):
             'leverage': lev, 'fund_equity': round(eq, 2),
             'fund_return_pct': round((eq / rt['initial'] - 1) * 100, 2),
             'funding_carry_annual_pct': round(carry_annual, 2),
-            'cash_pct': cash_pct,
+            'cash_pct': cash_pct, 'target_cash_pct': target_cash,
             'weights': {c: round(rt['weights'][c], 1) for c in uni},
             'target': (None if rt['last_target'] is None
                        else {c: round(rt['last_target'][c], 1) for c in uni}),

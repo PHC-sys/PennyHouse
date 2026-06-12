@@ -15,6 +15,7 @@ export default function FundDetailPage() {
   const [state, setState] = useState(null);
   const [deposit, setDeposit] = useState(10000);
   const [votes, setVotes] = useState({});
+  const [cash, setCash] = useState(0);
   const timer = useRef(null);
 
   useEffect(() => {
@@ -31,7 +32,7 @@ export default function FundDetailPage() {
   function refresh() { api(`/api/funds/${id}/state`).then(setState).catch(() => {}); }
   async function submit() {
     await api(`/api/funds/${id}/vote`, { method: 'POST',
-      body: JSON.stringify({ user: me, deposit: +deposit, votes }) });
+      body: JSON.stringify({ user: me, deposit: +deposit, votes: { ...votes, cash: +cash } }) });
     refresh();
   }
   async function reset() { await api(`/api/funds/${id}/reset`, { method: 'POST' }); refresh(); }
@@ -57,6 +58,29 @@ export default function FundDetailPage() {
           <div><div className="label">가상 예치금 ($)</div>
             <input className="input w-full" type="number" step="1000"
               value={deposit} onChange={(e) => setDeposit(e.target.value)} /></div>
+
+          {/* 현금 보유 비율 */}
+          <div className="rounded-xl border border-border p-3">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-semibold">💵 현금 보유 비율</span>
+              <span className="text-xs text-muted">방향 모를 땐 현금 ↑</span>
+            </div>
+            <div className="flex gap-1.5 items-center">
+              {[0, 10, 25, 50].map((v) => (
+                <button key={v} onClick={() => setCash(v)}
+                  className={`flex-1 py-1.5 text-xs rounded-lg border transition
+                    ${+cash === v ? 'bg-brand text-bg border-brand' : 'border-border text-muted hover:text-fg'}`}>
+                  {v}%</button>
+              ))}
+              <input type="number" min="0" max="100" value={cash}
+                onChange={(e) => setCash(Math.max(0, Math.min(100, +e.target.value)))}
+                className="input w-16 py-1.5 text-xs text-center" />
+              <span className="text-xs text-muted">%</span>
+            </div>
+            <div className="text-[10px] text-muted mt-1.5">
+              나머지 {100 - (+cash || 0)}%를 아래 종목 투표로 배분</div>
+          </div>
+
           <div className="divide-y divide-border">
             {uni.map((c) => (
               <div key={c} className="flex items-center gap-2 py-2">
@@ -94,8 +118,8 @@ export default function FundDetailPage() {
           <div>
             <div className="flex items-center justify-between">
               <div className="label mb-0">현재 포트폴리오</div>
-              {state?.cash_pct > 0 && <span className="text-[10px] text-muted">
-                현금(미투입) {state.cash_pct}%</span>}
+              {(state?.cash_pct > 0 || state?.target_cash_pct > 0) && <span className="text-[10px] text-muted">
+                현금 {state.cash_pct}%{state?.target_cash_pct ? ` (목표 ${state.target_cash_pct}%)` : ''}</span>}
             </div>
             <table className="w-full text-[11px] mt-1">
               <thead><tr className="text-muted">
