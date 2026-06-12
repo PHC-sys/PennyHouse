@@ -161,7 +161,8 @@ export default function FundDetailPage() {
             </table>
           </div>
 
-          <div><div className="label">실시간 NAV</div><Line data={navData} height={180} area /></div>
+          <div><div className="label">실시간 NAV <span className="text-[9px]">분 단위 · UTC</span></div>
+            <Line data={navData} height={180} area /></div>
         </div>
       </div>
 

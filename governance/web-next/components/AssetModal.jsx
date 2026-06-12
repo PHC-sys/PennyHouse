@@ -84,7 +84,7 @@ export default function AssetModal({ asset, onClose }) {
           {/* 캔들 + OHLC 리드아웃 */}
           <div>
             <div className="flex items-center gap-3 mb-2 flex-wrap">
-              <h4 className="text-sm font-semibold">가격 차트</h4>
+              <h4 className="text-sm font-semibold">가격 차트 <span className="text-muted text-[10px]">시간 UTC</span></h4>
               <div className="flex gap-1.5">
                 {INTERVALS.map((iv) => (
                   <span key={iv} className={`chip ${interval === iv ? 'chip-active' : ''}`}
@@ -110,8 +110,13 @@ export default function AssetModal({ asset, onClose }) {
           {/* 펀딩 + 상대가격 */}
           <div className="grid md:grid-cols-2 gap-4">
             <div>
-              <h4 className="text-sm font-semibold mb-2">펀딩비 추이 <span className="text-muted text-xs">연환산 %</span></h4>
-              <Line data={funding} height={200} color="#f0b90b" area />
+              <h4 className="text-sm font-semibold mb-1">펀딩비 추이
+                <span className="text-muted text-[10px] ml-1">최근 90일 · 시간별 연환산 % · UTC</span></h4>
+              <div className="text-[10px] text-muted mb-1">
+                ━ 점선 = 현재 펀딩 <span className={cls(-asset.funding_annual)}>{asset.funding_annual}%</span>
+                <span className="ml-1">(헤더와 동일, 차트는 과거 추이)</span></div>
+              <Line data={funding} height={186} color="#f0b90b" area
+                baseline={{ value: asset.funding_annual, label: '현재', color: '#e74c3c' }} />
             </div>
             <div>
               <div className="flex items-center gap-2 mb-2">

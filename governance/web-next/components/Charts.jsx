@@ -138,11 +138,12 @@ export function Spark({ data, height = 48, up = true }) {
   return <div ref={elRef} style={{ height }} />;
 }
 
-// 단일 라인 (NAV/펀딩/상대가격) — 실시간 갱신 대응
-export function Line({ data, height = 200, color = '#5b8def', area = false }) {
+// 단일 라인 (NAV/펀딩/상대가격) — 실시간 갱신 + 선택적 기준선(baseline)
+export function Line({ data, height = 200, color = '#5b8def', area = false, baseline }) {
   const elRef = useRef(null);
   const chartRef = useRef(null);
   const sRef = useRef(null);
+  const plRef = useRef(null);
   useEffect(() => {
     const el = elRef.current;
     if (!el) return;
@@ -153,7 +154,7 @@ export function Line({ data, height = 200, color = '#5b8def', area = false }) {
           bottomColor: color + '05', lineWidth: 2 })
       : chart.addLineSeries({ color, lineWidth: 2 });
     const ro = attachResize(el, chart);
-    return () => { ro.disconnect(); chart.remove(); chartRef.current = null; sRef.current = null; };
+    return () => { ro.disconnect(); chart.remove(); chartRef.current = null; sRef.current = null; plRef.current = null; };
   }, [height, color, area]);
   useEffect(() => {
     if (sRef.current && data && data.length) {
@@ -161,5 +162,16 @@ export function Line({ data, height = 200, color = '#5b8def', area = false }) {
       chartRef.current?.timeScale().fitContent();
     }
   }, [data]);
+  // 기준선 (예: 현재 펀딩값)
+  useEffect(() => {
+    if (!sRef.current) return;
+    if (plRef.current) { try { sRef.current.removePriceLine(plRef.current); } catch {} plRef.current = null; }
+    if (baseline && baseline.value != null) {
+      plRef.current = sRef.current.createPriceLine({
+        price: baseline.value, color: baseline.color || '#f6465d',
+        lineWidth: 1, lineStyle: LineStyle.Dashed,
+        axisLabelVisible: true, title: baseline.label || '' });
+    }
+  }, [baseline, data]);
   return <div ref={elRef} style={{ height }} />;
 }
