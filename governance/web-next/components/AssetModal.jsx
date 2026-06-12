@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { api, cls, smartNum } from '@/components/api';
 import { Candles, Line } from '@/components/Charts';
 import AssetPicker, { VOL } from '@/components/AssetPicker';
-import { useLiveMids } from '@/components/useLive';
+import { useLiveMids, useAssetCtx } from '@/components/useLive';
 
 const INTERVALS = ['1h', '4h', '1d', '1w'];
 const INTERVAL_SEC = { '1h': 3600, '4h': 14400, '1d': 86400, '1w': 604800 };
@@ -22,11 +22,27 @@ export default function AssetModal({ asset, onClose }) {
   const [vol, setVol] = useState(null);
 
   const sym = asset.symbol;
-  // 라이브: 이 자산 + 비교 자산만 구독
+  // 라이브: 가격(mids) + 이 자산 풀 ctx(펀딩/OI/거래량) — 거래소 방식
   const { prices: live, flash } = useLiveMids([sym, relAsset.symbol]);
-  const livePrice = live[sym];
+  const ctx = useAssetCtx(sym);
+  const livePrice = ctx?.price ?? live[sym];
   const prevDay = asset.change_24h != null ? asset.price / (1 + asset.change_24h / 100) : null;
-  const liveChange = (prevDay && livePrice) ? (livePrice / prevDay - 1) * 100 : asset.change_24h;
+  const liveChange = ctx?.change_24h ?? ((prevDay && livePrice) ? (livePrice / prevDay - 1) * 100 : asset.change_24h);
+  const liveFunding = ctx?.funding_annual ?? asset.funding_annual;
+  const liveVol = ctx?.volume_24h ?? asset.volume_24h;
+  const liveOI = ctx?.open_interest ?? asset.open_interest;
+
+  // 펀딩 정산 카운트다운 (HL은 매시 정각 UTC)
+  const [countdown, setCountdown] = useState('');
+  useEffect(() => {
+    const tick = () => {
+      const now = new Date();
+      const next = new Date(now); next.setUTCMinutes(60, 0, 0);
+      const s = Math.max(0, Math.floor((next - now) / 1000));
+      setCountdown(`${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`);
+    };
+    tick(); const t = setInterval(tick, 1000); return () => clearInterval(t);
+  }, []);
 
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape' && !pickerOpen) onClose(); };
@@ -70,12 +86,14 @@ export default function AssetModal({ asset, onClose }) {
           <div className={`stat-num font-semibold ${cls(liveChange)}`}>
             {liveChange > 0 ? '+' : ''}{liveChange?.toFixed(2)}% <span className="text-[10px] text-muted">24h</span>
           </div>
-          <div className="flex gap-4 text-xs text-muted ml-2 flex-wrap">
-            <span>펀딩 <span className={cls(-asset.funding_annual)}>{asset.funding_annual}%</span></span>
+          <div className="flex gap-4 text-xs text-muted ml-2 flex-wrap items-center">
+            <span>펀딩 <span className={cls(-liveFunding)}>{liveFunding}%</span>
+              <span className="ml-1 text-[10px] text-muted">정산 {countdown}</span></span>
             <span>변동성 <span className="text-fg">{vol != null ? (vol * 100).toFixed(1) + '%' : '—'}</span></span>
-            <span>24h Vol <span className="text-fg">${VOL(asset.volume_24h)}</span></span>
-            <span>OI <span className="text-fg">${VOL(asset.open_interest)}</span></span>
+            <span>24h Vol <span className="text-fg">${VOL(liveVol)}</span></span>
+            <span>OI <span className="text-fg">${VOL(liveOI)}</span></span>
             <span>최대 {asset.max_leverage}x</span>
+            {ctx && <span className="text-[9px] text-long">● LIVE</span>}
           </div>
           <button className="ml-auto btn-ghost py-1" onClick={onClose}>닫기 ✕</button>
         </div>
@@ -113,10 +131,10 @@ export default function AssetModal({ asset, onClose }) {
               <h4 className="text-sm font-semibold mb-1">펀딩비 추이
                 <span className="text-muted text-[10px] ml-1">최근 90일 · 시간별 연환산 % · UTC</span></h4>
               <div className="text-[10px] text-muted mb-1">
-                ━ 점선 = 현재 펀딩 <span className={cls(-asset.funding_annual)}>{asset.funding_annual}%</span>
+                ━ 점선 = 현재 펀딩 <span className={cls(-liveFunding)}>{liveFunding}%</span>
                 <span className="ml-1">(헤더와 동일, 차트는 과거 추이)</span></div>
               <Line data={funding} height={186} color="#f0b90b" area
-                baseline={{ value: asset.funding_annual, label: '현재', color: '#e74c3c' }} />
+                baseline={{ value: liveFunding, label: '현재', color: '#e74c3c' }} />
             </div>
             <div>
               <div className="flex items-center gap-2 mb-2">

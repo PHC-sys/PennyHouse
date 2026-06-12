@@ -206,6 +206,27 @@ async def ws_market(ws: WebSocket):
         return
 
 
+@app.websocket("/ws/asset/{coin:path}")
+async def ws_asset(ws: WebSocket, coin: str):
+    """포커스된 자산만 실시간 ctx(펀딩/마크/OI/거래량) 푸시 — 거래소 방식."""
+    await ws.accept()
+    live.subscribe_ctx(coin)
+    last = None
+    try:
+        while True:
+            ctx = live.get_ctx(coin)
+            if ctx and ctx != last:
+                await ws.send_json({"ctx": ctx})
+                last = ctx
+            await asyncio.sleep(1.0)
+    except WebSocketDisconnect:
+        pass
+    except Exception:
+        pass
+    finally:
+        live.unsubscribe_ctx(coin)
+
+
 @app.get("/api/relative")
 def get_relative(a: str, b: str, days: int = 180, interval: str = "1d"):
     """상대가격 A/B. HIP-3 prefix는 쿼리파라미터로 안전하게 전달."""

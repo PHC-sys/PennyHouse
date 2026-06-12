@@ -64,3 +64,29 @@ export function useLiveMids(symbols) {
 
   return { prices, flash };
 }
+
+/**
+ * 포커스된 단일 자산의 라이브 ctx 구독 (펀딩/마크/OI/거래량).
+ * 모달 열릴 때만 — 거래소 방식("보는 것만 구독").
+ */
+export function useAssetCtx(symbol) {
+  const [ctx, setCtx] = useState(null);
+  useEffect(() => {
+    if (!symbol) return;
+    setCtx(null);
+    let alive = true, retry, current;
+    function connect() {
+      try { current = new WebSocket(wsBase() + '/ws/asset/' + encodeURIComponent(symbol)); }
+      catch { return; }
+      current.onmessage = (e) => {
+        if (!alive) return;
+        try { const d = JSON.parse(e.data); if (d.ctx) setCtx(d.ctx); } catch {}
+      };
+      current.onclose = () => { if (alive) retry = setTimeout(connect, 2000); };
+      current.onerror = () => { try { current.close(); } catch {} };
+    }
+    connect();
+    return () => { alive = false; clearTimeout(retry); try { current?.close(); } catch {} };
+  }, [symbol]);
+  return ctx;
+}
