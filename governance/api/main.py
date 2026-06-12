@@ -2,14 +2,13 @@
 """
 GovernanceFund 백테스트 & 페이퍼 트레이딩 API.
 
-엔드포인트:
-  GET  /api/config                  코인/프로파일 메타
-  GET  /api/prices/{coin}           HL 캔들 (차트용)
-  POST /api/backtest                투표 시나리오 백테스트
-  POST /api/paper/vote              페이퍼 투표 제출
-  GET  /api/paper/state             페이퍼 펀드 현황 + NAV
-  POST /api/paper/reset             페이퍼 세션 초기화
-정적 프론트는 /  에서 서빙.
+주요 엔드포인트:
+  GET  /api/config /api/scenarios /api/assets        메타/자산 레지스트리
+  GET  /api/prices/{sym} /api/funding/{sym} /api/relative  차트
+  GET  /api/live  WS /ws/market                      라이브 가격
+  POST /api/backtest                                 백테스트
+  CRUD /api/funds, /api/funds/{id}/vote|state|reset  멀티펀드
+프론트는 Next.js(governance/web-next, :3010)가 /api/* 프록시.
 """
 import os
 import sys
@@ -19,7 +18,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 
 import asyncio
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
-from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
@@ -33,7 +31,6 @@ from governance.engine import (
     fetch_universe, compute_volatility, asset_sparkline, batch_sparklines,
 )
 from governance.engine.voting import apply_ema
-from governance.api import paper
 from governance.api import live
 from governance.api import store
 from governance.api import funds as funds_engine
@@ -394,38 +391,5 @@ def fund_reset(fund_id: str):
     return funds_engine.get_state(f)
 
 
-# ────────────────────────────────────────────────────────────────
-# 페이퍼 트레이딩 (단일 — 3-2에서 펀드별로 전환 예정)
-# ────────────────────────────────────────────────────────────────
-class VoteReq(BaseModel):
-    user: str
-    deposit: float = 10000
-    votes: dict  # {coin: int(-2~+2)}
-    profile: str = "aggressive"
-
-
-@app.post("/api/paper/vote")
-def post_vote(req: VoteReq):
-    if req.profile not in FUND_PROFILES:
-        raise HTTPException(400, "알 수 없는 프로파일")
-    paper.submit_vote(req.user, req.deposit, req.votes, req.profile)
-    return paper.get_state()
-
-
-@app.get("/api/paper/state")
-def get_paper_state():
-    return paper.get_state()
-
-
-@app.post("/api/paper/reset")
-def reset_paper():
-    paper.reset()
-    return paper.get_state()
-
-
-# ────────────────────────────────────────────────────────────────
-# 정적 프론트 (맨 마지막에 마운트)
-# ────────────────────────────────────────────────────────────────
-_web_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "web")
-if os.path.isdir(_web_dir):
-    app.mount("/", StaticFiles(directory=_web_dir, html=True), name="web")
+# 프론트는 Next.js(governance/web-next, :3010)가 담당.
+# 단일 페이퍼(api/paper.py)·정적 web/는 멀티펀드(api/funds.py)로 대체되어 제거됨.

@@ -430,6 +430,8 @@ cd governance/web-next && npm install && npm run dev   # → http://localhost:30
 | 2026-06-11 | [governance/api/store.py](governance/api/store.py), [funds.py](governance/api/funds.py) | 3차: SQLite 멀티펀드 + 펀드별 운용 엔진(3-1·3-2) |
 | 2026-06-11 | [docs/specs/GovernanceFund_Platform_roadmap.md](docs/specs/GovernanceFund_Platform_roadmap.md) | 상업용 플랫폼 로드맵(5단계) + 라이브 아키텍처 + 페이퍼vs실제 통찰 |
 | 2026-06-11 | [Note/20260611(GovernanceFund_Platform_Sprint).md](Note/20260611(GovernanceFund_Platform_Sprint).md) | 플랫폼 스프린트 개발일지 (결정·이유·트러블슈팅) |
+| 2026-06-11 | [governance/api/store.py](governance/api/store.py), [funds.py](governance/api/funds.py) | 3차 멀티펀드 완료: 펀드 개설/목록/상세, 현금투표, 자산별 레버캡/결제통화, 라이브 NAV |
+| 2026-06-11 | governance/ 정리 | 구 단일 paper.py·정적 web/ 제거, 차트 시간축, 프론트는 web-next로 일원화 |
 
 설계 참고 문서:
 

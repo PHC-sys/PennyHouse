@@ -201,11 +201,14 @@ tests/     test_engine.py (assert 검증 통과)
 ✅ 2.5차: 라이브 데이터 (HL WebSocket 워커→메모리→/ws 푸시)
         · 가격/펀딩 틱 갱신(플래시), 캔들 마지막봉 update + 봉 롤오버
         · live.py(워커), useLive.js(훅), 동적소수점 smartNum
-🔄 3차: SQLite 멀티펀드 (진행 중)
+✅ 3차: SQLite 멀티펀드 (완료)
         ✅ 3-1 store.py(SQLite) + 펀드 CRUD API (/api/funds)
         ✅ 3-2 funds.py 펀드별 운용 엔진 (유니버스/영속/라이브평가)
-        ⬜ 3-3 프론트 펀드 목록 + 개설 폼 (탭 전체/Demo/실제, ⌘K 유니버스) ← 다음
-        ⬜ 3-4 프론트 펀드 상세 (페이퍼 화면을 펀드별로) + 아래 설계 반영
+        ✅ 3-3 펀드 목록 + 개설 폼(탭/⌘K 유니버스) + 상세 화면
+        ✅ 3-4 현금(Cash) 투표 + 라이브 NAV(분단위 영속)
+            + 자산별 레버리지 캡/청산가(가격)/결제통화(USDC·USDH)/펀딩캐시
+        ✅ 정리: 구 단일 paper.py·정적 web/ 제거, 차트 시간축(timeVisible)
+⬜ 4차: 리플레이 모드 (게임형 과거 트레이딩) ← 다음
 ⬜ 4차: 리플레이 모드 (게임형 과거 트레이딩)
 ⬜ 5차: 지갑 서명 인증 (Private 펀드)
 ```
@@ -262,8 +265,12 @@ api/funds.py  fund_id별 런타임 상태(메모리) + 펀드 유니버스 운�
 API: POST/GET/DELETE /api/funds, GET /api/funds/{id},
      /api/funds/{id}/vote · /state · /reset
 목록 정렬: 내펀드(creator/투표) → demo → 최신. 첫실행 Demo펀드 자동시드.
-멀티유저 식별: 인증(5차) 전까지 localStorage 닉네임/clientId 기반.
-※ 기존 /api/paper/* (단일 paper.py)는 3-4에서 펀드별로 이전 후 제거 예정.
+멀티유저 식별: 인증(5차) 전까지 localStorage 닉네임(useMe).
+현금: 투표에 cash(0~100), 종목 target을 (100-cash)로 스케일. state target_cash_pct/cash_pct.
+레버리지: 자산별 유효레버 min(펀드,자산max), mmr=1/(2×자산max). 청산은 절대가격.
+결제통화: 레지스트리 quote(메인+xyz=USDC, vntl=USDH). 잔고체크는 Keeper 단계.
+NAV: 분 단위 upsert(같은 분 덮어쓰기) SQLite 영속.
+※ 구 단일 paper.py·정적 web/ 제거 완료. 프론트는 web-next(:3010)만.
 
 #### web-next 주요 컴포넌트 (2026-06-11)
 ```
