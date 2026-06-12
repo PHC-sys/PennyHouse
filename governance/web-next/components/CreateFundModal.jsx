@@ -22,14 +22,18 @@ export default function CreateFundModal({ me, onClose, onCreated }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
 
+  const CAP = 10;
   function addAsset(a) {
-    setUniverse((u) => u.includes(a.symbol) ? u : [...u, a.symbol]);
+    setUniverse((u) => (u.includes(a.symbol) || u.length >= CAP) ? u : [...u, a.symbol]);
   }
   function addMany(list) {
     setUniverse((u) => {
-      const set = new Set(u);
-      list.forEach((a) => set.add(a.symbol));
-      return [...set];
+      const arr = [...u];
+      for (const a of list) {
+        if (arr.length >= CAP) break;
+        if (!arr.includes(a.symbol)) arr.push(a.symbol);
+      }
+      return arr;
     });
   }
   function removeAsset(s) { setUniverse((u) => u.filter((x) => x !== s)); }
@@ -99,15 +103,18 @@ export default function CreateFundModal({ me, onClose, onCreated }) {
             <input className="input w-full" type="number" step="10000" value={maxDeposit}
               onChange={(e) => setMaxDeposit(e.target.value)} placeholder="비우면 무제한" /></Field>
 
-          <Field label={`운용 자산 (${universe.length}종)`}>
+          <Field label={`운용 자산 (${universe.length}/${CAP}종)`}>
             <div className="flex flex-wrap gap-1.5 mb-2">
               {universe.map((s) => (
                 <span key={s} className="chip chip-active flex items-center gap-1"
                   onClick={() => removeAsset(s)}>
                   {s.split(':').pop()} <span className="text-[10px]">✕</span></span>
               ))}
-              <button className="chip" onClick={() => setPickerOpen(true)}>+ 자산 추가</button>
+              {universe.length < CAP
+                ? <button className="chip" onClick={() => setPickerOpen(true)}>+ 자산 추가</button>
+                : <span className="text-[10px] text-muted self-center">최대 {CAP}종</span>}
             </div>
+            <div className="text-[10px] text-muted">투표가 부담되지 않게 최대 {CAP}종으로 제한</div>
           </Field>
 
           {err && <div className="text-short text-sm">⚠ {err}</div>}

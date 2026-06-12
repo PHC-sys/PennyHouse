@@ -273,6 +273,8 @@ API: POST/GET/DELETE /api/funds, GET /api/funds/{id},
   분류는 키워드 우선→dex 폴백(_classify). 카테고리 crypto/tradfi(stock/index/commodity/fx)/preipo.
   Pre-IPO=실제 비상장만(SPACEX/OPENAI/ANTHROPIC/SPCX/QNT), 테마바스켓(MAG7/SEMIS등)=index.
   마켓·팔레트 탭 HL식 세분화(주식/지수/원자재/FX). 펀드개설 팔레트 분류 일괄추가.
+  스테이블/크립토성(USDE 등)은 crypto 강제(_CRYPTO_FORCE).
+  펀드 운용 자산 최대 10종 캡(투표 부담 방지, OMR 카드 X). 백엔드+프론트 강제.
   ※ 거래량 0(죽은 마켓) 자산 제외는 추후.
 NAV: 분 단위 upsert(같은 분 덮어쓰기) SQLite 영속.
 ※ 구 단일 paper.py·정적 web/ 제거 완료. 프론트는 web-next(:3010)만.

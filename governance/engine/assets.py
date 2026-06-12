@@ -38,6 +38,8 @@ _INDICES = {
 }  # BTCD/TOTAL2/OTHERS(크립토 지수)는 crypto로 둠
 # 실제 Pre-IPO/비상장 기업만
 _PREIPO = {'SPACEX', 'OPENAI', 'ANTHROPIC', 'SPCX', 'QNT'}
+# 스테이블/크립토성 (dex 무관하게 crypto로)
+_CRYPTO_FORCE = {'USDE', 'USDC', 'USDH', 'USDT', 'DAI', 'PURRDAT'}
 
 _CACHE = {}
 _TTL = 300  # 5분 (라이브 가격은 별도 워커, 레지스트리는 자주 안 변함)
@@ -61,6 +63,8 @@ def _classify(dex, display):
     Returns: (category, sub)
     """
     n = display.upper()
+    if n in _CRYPTO_FORCE:
+        return 'crypto', None
     if n in _PREIPO:
         return 'preipo', None
     if n in _COMMODITIES:

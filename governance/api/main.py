@@ -327,6 +327,8 @@ def create_fund(req: CreateFundReq):
         raise HTTPException(400, "알 수 없는 프로파일")
     if not req.universe:
         raise HTTPException(400, "운용 자산을 1개 이상 선택")
+    if len(req.universe) > 10:
+        raise HTTPException(400, "운용 자산은 최대 10종까지")
     fid = ("demo" if req.kind == "demo" else "fund") + "-" + uuid.uuid4().hex[:8]
     store.create_fund({"id": fid, **req.dict()})
     return store.get_fund(fid)
