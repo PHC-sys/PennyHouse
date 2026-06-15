@@ -45,6 +45,17 @@ _CACHE = {}
 _TTL = 300  # 5분 (라이브 가격은 별도 워커, 레지스트리는 자주 안 변함)
 _TOKEN_MAP = {}  # 토큰 인덱스 → 이름 (USDC/USDH...)
 
+# Pre-IPO 자산이 IPO되어 delist될 때 후속 상장주 매핑 (수동 큐레이션).
+# HL은 delisting '사유'도 '후속 종목 링크'도 주지 않으므로(플래그 isDelisted 하나뿐)
+# 손수 관리한다. 매핑이 있으면 펀드가 후속 종목으로 롤오버 가능, 없으면 settle-to-cash.
+# 예: 'vntl:SPACEX': 'xyz:SPCX' (실제 상장·HL 등재 확인 후 채울 것)
+PREIPO_SUCCESSOR = {}
+
+
+def successor_of(symbol):
+    """delist된 자산의 후속 종목 심볼 (없으면 None → settle-to-cash)."""
+    return PREIPO_SUCCESSOR.get(symbol)
+
 
 def _token_name(idx):
     """결제통화 인덱스 → 이름 (spotMeta 캐시)."""
@@ -93,6 +104,7 @@ def fetch_universe(use_cache=True):
         return _CACHE['uni'][1]
 
     rows = []
+    delisted = {}  # 상장폐지 자산: symbol -> {final_price, ...} (펀드 정산용, 발견목록 제외)
     # 전 dex 수집 (perpDexs로 동적 발견 + 메인) — 병렬 호출로 로딩 단축
     dexs = _post({'type': 'perpDexs'}) or []
     dex_names = [None] + [d['name'] for d in dexs if d and isinstance(d, dict)]
@@ -112,10 +124,18 @@ def fetch_universe(use_cache=True):
         universe, ctxs = data[0]['universe'], data[1]
         quote = _token_name(data[0].get('collateralToken', 0))
         for i, u in enumerate(universe):
-            if u.get('isDelisted'):
-                continue
             raw = u['name']
             disp = raw.split(':')[-1]
+            if u.get('isDelisted'):
+                # 발견 목록에선 빼되, 펀드가 담고 있을 수 있으니 최종가와 함께 기록.
+                ctx = ctxs[i] if i < len(ctxs) else {}
+                delisted[raw] = {
+                    'symbol': raw, 'display': disp, 'dex': dex or 'main',
+                    'final_price': float(ctx.get('markPx') or 0),
+                    'quote': quote, 'category': _classify(dex, disp)[0],
+                    'successor': successor_of(raw),
+                }
+                continue
             category, sub = _classify(dex, disp)
             ctx = ctxs[i] if i < len(ctxs) else {}
             mark = float(ctx.get('markPx') or 0)
@@ -143,8 +163,18 @@ def fetch_universe(use_cache=True):
             best[key] = r
     out = list(best.values())
     out.sort(key=lambda r: -r['volume_24h'])
-    _CACHE['uni'] = (time.time(), out)
+    now = time.time()
+    _CACHE['uni'] = (now, out)
+    _CACHE['delisted'] = (now, delisted)  # uni와 한 스캔에서 동시 갱신 (정합 유지)
     return out
+
+
+def delisted_map(use_cache=True):
+    """상장폐지 자산 맵 {symbol: {final_price, successor, ...}} — 펀드 정산용."""
+    fresh = ('delisted' in _CACHE and time.time() - _CACHE['delisted'][0] < _TTL)
+    if not (use_cache and fresh):
+        fetch_universe(use_cache=False)  # 전 dex 재스캔하며 delisted 동시 갱신
+    return _CACHE.get('delisted', (0, {}))[1]
 
 
 def compute_volatility(symbol, days=30):

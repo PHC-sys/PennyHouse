@@ -377,9 +377,37 @@ def get_fund(fund_id: str):
 
 
 @app.delete("/api/funds/{fund_id}")
-def remove_fund(fund_id: str):
+def remove_fund(fund_id: str, user: Optional[str] = None):
+    """펀드 삭제 — 생성자만, 자금이 0일 때만 (전원 회수/청산 후)."""
+    f = store.get_fund(fund_id)
+    if not f:
+        raise HTTPException(404, "펀드 없음")
+    if f.get("creator") and user != f["creator"]:
+        raise HTTPException(403, "펀드 생성자만 삭제할 수 있어요")
+    total_dep = sum(v["deposit"] for v in store.get_votes(fund_id))
+    equity = funds_engine.current_equity(f)
+    if total_dep > 0 and equity > 1e-6:
+        raise HTTPException(400, "자금이 남아 있어 삭제할 수 없어요 — 참가자 전원 회수 후 가능")
     store.delete_fund(fund_id)
+    funds_engine.drop_runtime(fund_id)
     return {"ok": True}
+
+
+class RedeemReq(BaseModel):
+    user: str
+
+
+@app.post("/api/funds/{fund_id}/redeem")
+def fund_redeem(fund_id: str, req: RedeemReq):
+    """참가자 지분 회수(출금/탈퇴). 그의 share만큼 인출하고 투표 삭제."""
+    f = store.get_fund(fund_id)
+    if not f:
+        raise HTTPException(404, "펀드 없음")
+    res = funds_engine.redeem(f, req.user)
+    if res is None:
+        raise HTTPException(400, "이 펀드에 예치(투표) 내역이 없어요")
+    state = funds_engine.get_state(f)
+    return {**state, "redeemed": res["redeemed"], "remaining": res["remaining"]}
 
 
 class FundVoteReq(BaseModel):

@@ -85,6 +85,25 @@ position_notional = |수량| × mark_price = (비중/100) × equity × leverage
 ```
 - HL `meta`의 자산별 `maxLeverage`로 mmr 추정 → 실제 청산가 괴리 최소화.
 
+### 3-3. Pre-IPO/상장폐지 자산 생애주기 (settle-to-cash, 2026-06-15)
+```
+근거(실측): HL은 isDelisted 플래그만 제공. delisting '사유'도 '후속 종목 링크'도 없음.
+  · delisting은 IPO 전용 이벤트가 아님 (vntl:GOLDJM/SILVERJM = 원자재 계약 교체)
+  · delisted ≠ 거래량0 (vntl:BIOTECH는 vol0이지만 정상 상장)
+  → "IPO 전환 자동 감지/연결"은 데이터상 불가. 풀 수 있는 건 '보유 포지션 정산'.
+
+정책: 펀드 보유 자산이 delist되면 settle-to-cash
+  · 마지막 mark로 그 leg 청산 → 비중 0 (빠진 비중은 현금으로 흡수)
+  · asset_pnl(손익 기여)은 정산 시점 값으로 동결, 이후 마킹 제외
+  · UI: "정산됨/상장폐지" 표시, 투표 불가
+  · HL이 진실의 원천 → 서버 재시작해도 delisted_map으로 다시 복원 (멱등)
+  · 실제 HL이 perp delist 시 미결제 포지션을 최종 mark로 강제정산하는 것과 동일
+
+후속종목 매핑(선택): assets.PREIPO_SUCCESSOR = {} (수동 큐레이션 훅)
+  · 매핑 있으면 후속 상장주로 롤오버 가능, 없으면 cash 폴백
+  · 현재 HL에 실제 후속 상장주(SPCX 등) 없어 빈 dict — 생기면 한 줄 추가
+```
+
 ---
 
 ## 4. 빌드 순서 (단계)
@@ -124,6 +143,16 @@ position_notional = |수량| × mark_price = (비중/100) × equity × leverage
   □ 펀드 개설 폼: 이름·가상예치금·최대한도·Public/Private·허용지갑·
      운용 유니버스(자산 선택)·초기 비중·레버리지
   □ 펀드 목록 + 입장
+
+3.5차 — 운영 보강 (2026-06-15)  ✅ 완료
+  ✅ 라이브 워커 dex 구독을 perpDexs로 동적화 (km/flx 등 비주요 dex 자산도
+     라이브 가격 수신 → 평단·청산가·손익 누락 버그 수정)
+  ✅ Pre-IPO/상장폐지 자산 생애주기 = settle-to-cash (아래 3-3 참조)
+  ✅ 참가자 지분 회수(redeem): share만큼 인출 + 투표 삭제(영속).
+     남은 참가자 가치 불변. 실주문 연동 전 페이퍼 인출(자본 차감은 런타임).
+  ✅ 펀드 삭제 게이트: 생성자 본인 + 자금 0(전원 회수/청산)일 때만.
+     (기존 무조건 DELETE → 권한·자금 가드 추가, 프론트 삭제 버튼 신규)
+  ✅ 펀드 목록 "내 펀드" 탭 (creator===me)
 
 4차 — 게임형 (멀티펀드 위)
   □ 리플레이 모드: 과거 시점 시작 → 구간별 공개 → 투표 → 진행 →

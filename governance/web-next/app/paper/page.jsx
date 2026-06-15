@@ -7,6 +7,7 @@ import CreateFundModal from '@/components/CreateFundModal';
 
 const TABS = [
   { key: 'all', label: '전체' },
+  { key: 'mine', label: '내 펀드' },
   { key: 'demo', label: 'Demo' },
   { key: 'real', label: '실제' },
 ];
@@ -25,7 +26,10 @@ export default function FundListPage() {
   }
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [me]);
 
-  const shown = funds.filter((f) => tab === 'all' || f.kind === tab);
+  const shown = funds.filter((f) =>
+    tab === 'all' ? true
+      : tab === 'mine' ? f.creator === me  // 내가 '개설'한 펀드만 (투표만 한 건 제외)
+        : f.kind === tab);
 
   return (
     <div className="space-y-5">

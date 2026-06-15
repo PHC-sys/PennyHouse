@@ -10,13 +10,34 @@ import json
 import time
 import threading
 
+import requests
+
 try:
     import websocket  # websocket-client
 except ImportError:
     websocket = None
 
 WS_URL = 'wss://api.hyperliquid.xyz/ws'
-DEXES = [None, 'xyz', 'vntl']  # 메인 + HIP-3
+HL_INFO = 'https://api.hyperliquid.xyz/info'
+
+# 구독할 dex 목록 — perpDexs로 동적 발견 (레지스트리 fetch_universe와 일치시킴).
+# 정적 3개로 두면 km/flx 등 다른 dex 자산이 라이브 mid를 못 받아
+# 평단·청산가·손익이 비는 버그가 생긴다. 발견 실패 시 아래 폴백 사용.
+_DEX_FALLBACK = [None, 'xyz', 'vntl']
+_DEX_LIST = list(_DEX_FALLBACK)
+
+
+def _refresh_dexes():
+    """HL perpDexs로 전체 dex 목록 갱신 (재접속마다 호출, 새 dex 자동 반영)."""
+    global _DEX_LIST
+    try:
+        r = requests.post(HL_INFO, json={'type': 'perpDexs'}, timeout=10)
+        dexs = r.json() or []
+        names = [None] + [d['name'] for d in dexs if d and isinstance(d, dict)]
+        if names:
+            _DEX_LIST = names
+    except Exception:
+        pass  # 폴백(기존 값) 유지
 
 # 메모리 스토어 (스레드 안전: 단순 dict 대입)
 LIVE_MIDS = {}        # symbol -> float price
@@ -43,7 +64,7 @@ def _send(obj):
 
 def _on_open(ws):
     _ws_ref[0] = ws
-    for dex in DEXES:
+    for dex in _DEX_LIST:
         sub = {'type': 'allMids'}
         if dex:
             sub['dex'] = dex
@@ -91,6 +112,7 @@ def _run():
     backoff = 1
     while True:
         try:
+            _refresh_dexes()  # 접속 전 dex 목록 최신화 (새 dex 자동 구독)
             ws = websocket.WebSocketApp(
                 WS_URL, on_open=_on_open, on_message=_on_message)
             ws.run_forever(ping_interval=20, ping_timeout=10)

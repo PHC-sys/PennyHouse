@@ -203,28 +203,39 @@ governance.db  SQLite (gitignore, 첫 실행 시 자동 생성+Demo 시드)
         ✅ 3-4 현금(Cash) 투표 + 라이브 NAV(분단위 영속)
             + 자산별 레버리지 캡/청산가(가격)/결제통화(USDC·USDH)/펀딩캐시
         ✅ 정리: 구 단일 paper.py·정적 web/ 제거, 차트 시간축(timeVisible)
+✅ 3.5차: 운영 보강 (2026-06-15)
+        ✅ 라이브 워커 전 dex 동적 구독 (km/flx 등 자산 평단·청산가 누락 버그 수정)
+        ✅ Pre-IPO/상장폐지 자산 settle-to-cash (보유 자산 delist 시 최종가 청산→현금)
+        ✅ 참가자 지분 회수(redeem) — share만큼 인출 + 투표 삭제(영속)
+        ✅ 펀드 삭제 게이트 — 생성자 + 자금 0일 때만 (프론트 버튼 신규)
+        ✅ 펀드 목록 "내 펀드" 탭 (creator===me)
 ⬜ 4차: 리플레이 모드 (게임형 과거 트레이딩) ← 다음 후보
 ⬜ 5차: 지갑 서명 인증 (Private 펀드)
 ⬜ 6차: 운영자 어드민 (초대제/가입 승인제)
 ```
 
-#### ★ 다음 세션에서 정할 것 (2026-06-13 미해결)
+#### ★ 다음 세션에서 정할 것 (2026-06-15 갱신)
 ```
-1) Pre-IPO 자산 생애주기 (★ 우선 논의)
-   - Pre-IPO perp은 해당 기업이 IPO되면 delisted → 실제 주식으로 전환됨
-   - 예: vntl:SPACEX가 delisted(거래량0)된 건 "죽은 게 아니라 IPO 전환" 맥락일 수 있음
-   - 현재 우리는 isDelisted 자산을 그냥 제외 → 이벤트성(IPO) delisting과 진짜 폐기 구분 필요
-   - 질문: IPO 전환 시 자동으로 stock으로 연결? 그 자산 담은 펀드는?
-   - 단순 분류 버그가 아니라 "Pre-IPO 자산을 플랫폼이 어떻게 다룰까" 설계 주제
+1) Pre-IPO 자산 생애주기  ✅ 해결 (2026-06-15)
+   - 실측: HL은 isDelisted 플래그만 줌. delisting '사유'도 '후속 종목 링크'도 없음.
+     · vntl:SPACEX = 진짜 delisted, vntl:BIOTECH = vol0이지만 정상 (둘은 별개)
+     · vntl:GOLDJM/SILVERJM도 delisted → delisting은 IPO 전용 이벤트가 아님(원자재 계약 교체)
+   - 결론: "IPO 전환 자동 감지"는 데이터상 불가 → 풀 수 있는 건 '보유 포지션 정산'.
+   - 채택: settle-to-cash — delist 시 최종 mark로 청산→현금, 비중0, 손익동결, "정산됨" 표시.
+     (실제 HL이 perp delist 시 미결제 포지션을 최종 mark로 강제정산하는 것과 동일)
+   - 후속종목 매핑: assets.PREIPO_SUCCESSOR 훅만 마련(현재 빈 dict). 실제 후속 상장주가
+     HL에 생기면 한 줄 추가로 롤오버 활성화, 없으면 cash 폴백.
 
-2) 자산 분류 vs HL 일치 문제
+2) 자산 분류 vs HL 일치 문제  ⬜ 여전히 열림
    - HL API엔 카테고리 필드 없음 → 키워드(_classify)로 복제 중 → 빈틈 생김
    - 옵션: A) 키워드 정교화  B) dex 기반 대분류  C) 검색에 회사명 별칭(SpaceX→SPCX)
    - "SPACE" 검색이 "SPCX"(티커) 못 찾는 문제도 여기 포함
 
-3) 거래량 0(죽은 마켓) 자산 처리 정책 (위 1번과 연동)
+3) 거래량 0(죽은 마켓) 자산 처리  ✅ 사실상 해소
+   - 발견 목록은 이미 isDelisted 기준이라 vol0(BIOTECH 등)은 정상 유지 = 맞는 동작.
+   - 실제로 빼야 하는 건 delisted뿐 → 1)의 settle-to-cash로 커버됨.
 
-→ 오늘 할 일: 위 셋(특히 1) 방향 정하거나, 4차 리플레이 착수.
+→ 다음 할 일: 2번(분류/검색 별칭) 마무리 or 4차 리플레이 착수.
 ```
 
 #### ★ 핵심 설계 통찰 — DB(페이퍼) vs 블록체인(실제)
@@ -276,8 +287,14 @@ api/funds.py  fund_id별 런타임 상태(메모리) + 펀드 유니버스 운�
               · 메타/펀딩/레버리지는 fetch_universe 레지스트리(HIP-3 포함)
 펀드 필드: kind(demo|real), visibility(public|private), creator(닉네임=localStorage),
           universe[], profile/leverage, initial_deposit, max_deposit, allowlist(저장만)
-API: POST/GET/DELETE /api/funds, GET /api/funds/{id},
-     /api/funds/{id}/vote · /state · /reset
+API: POST/GET /api/funds, GET /api/funds/{id},
+     /api/funds/{id}/vote · /state · /reset · /redeem(지분 회수)
+     DELETE /api/funds/{id}?user= — 생성자 + 자금 0일 때만 (가드)
+상장폐지: assets.delisted_map(보유 자산 정산용) + PREIPO_SUCCESSOR(후속종목 매핑 훅).
+  funds.py가 보유 자산 delist 감지→settle-to-cash(비중0/손익동결/현금). state에 settled 플래그.
+회수(redeem): share만큼 equity/initial/asset_pnl 동일비율 축소(남은 참가자 가치 불변),
+  투표는 store.delete_vote로 영속 삭제. 전원 회수 시 자본 0 → 생성자 삭제 가능.
+  (실주문 연동 전 페이퍼 인출 — 자본 차감은 런타임 메모리, 투표 삭제는 SQLite)
 목록 정렬: 내펀드(creator/투표) → demo → 최신. 첫실행 Demo펀드 자동시드.
 멀티유저 식별: 인증(5차) 전까지 localStorage 닉네임(useMe).
 현금: 투표에 cash(0~100), 종목 target을 (100-cash)로 스케일. state target_cash_pct/cash_pct.

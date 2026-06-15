@@ -12,13 +12,25 @@ import threading
 
 from governance.engine import (
     FUND_PROFILES, adaptive_alpha, simulate_votes, votes_to_target,
-    liquidation_price, compute_volatility, fetch_universe,
+    liquidation_price, compute_volatility, fetch_universe, delisted_map,
 )
 from governance.engine.voting import apply_ema
 from governance.api import store, live
 
 _INITIAL = 100_000.0
 _lock = threading.Lock()
+
+
+def _retpct(eq, init, nd=2):
+    """수익률(%) — 자본 0(전원 회수)일 때 0 나눗셈 방지."""
+    return round((eq / init - 1) * 100, nd) if init and init > 1e-9 else 0.0
+
+
+def _pnlpct(pnl, init):
+    """자산 손익 기여도(%) — 자본 0일 때 0 나눗셈 방지."""
+    return round(pnl / init * 100, 2) if init and init > 1e-9 else 0.0
+
+
 _runtime = {}      # fund_id -> {weights, equity, asset_pnl, avg_entry, last_prices, last_target}
 _vol_cache = {}    # symbol -> (ts, vol)
 _VOL_TTL = 1800
@@ -46,7 +58,34 @@ def _fresh_runtime(fund):
         'asset_pnl': {c: 0.0 for c in uni},
         'avg_entry': {c: None for c in uni},
         'last_prices': {}, 'last_target': None, 'initial': init,
+        'settled': {},  # 상장폐지로 정산된 자산: symbol -> {final_price, ts, successor}
     }
+
+
+def _reconcile_delisted(fund, rt):
+    """
+    펀드가 담은 자산이 상장폐지되면 settle-to-cash: 그 leg를 마지막 mark로 청산.
+    → 비중 0(빠진 만큼 현금), 손익(asset_pnl)은 그 시점 값으로 동결, settled 기록.
+    HL이 진실의 원천이므로 재시작해도 delisted_map으로 다시 복원된다.
+    (실제 HL이 perp을 delist할 때 미결제 포지션을 최종 mark로 강제정산하는 것과 동일)
+    """
+    dl = delisted_map()
+    if not dl:
+        return
+    for c in fund['universe']:
+        if c in dl and c not in rt['settled']:
+            info = dl[c]
+            rt['settled'][c] = {
+                'final_price': info.get('final_price'),
+                'ts': int(time.time()),
+                'successor': info.get('successor'),
+            }
+            rt['weights'][c] = 0.0  # 포지션 청산 → 빠진 비중은 현금으로 흡수
+
+
+def _active(fund, rt):
+    """정산되지 않은(운용 중) 자산만."""
+    return [c for c in fund['universe'] if c not in rt['settled']]
 
 
 def _rt(fund):
@@ -54,6 +93,7 @@ def _rt(fund):
     fid = fund['id']
     if fid not in _runtime:
         _runtime[fid] = _fresh_runtime(fund)
+        _reconcile_delisted(fund, _runtime[fid])
         _aggregate(fund)  # 저장된 투표로 목표 비중 1회 반영
     return _runtime[fid]
 
@@ -62,7 +102,7 @@ def _aggregate(fund):
     """저장된 투표 → 목표 비중 + EMA 한 스텝."""
     fid = fund['id']
     rt = _runtime[fid]
-    uni = fund['universe']
+    uni = _active(fund, rt)  # 정산(상장폐지) 자산은 집계 제외 → 비중 0 유지
     votes = store.get_votes(fid)
     if not votes:
         return
@@ -86,6 +126,9 @@ def _aggregate(fund):
     alpha = adaptive_alpha(7, profile['T_CONVERGE'])
     cap = profile['MAX_WEIGHT']
     rt['weights'] = apply_ema(rt['weights'], target, alpha, cap, uni)
+    # apply_ema는 active uni만 키로 반환 → 정산 자산 키(비중 0)를 복원해 둠
+    for c in rt['settled']:
+        rt['weights'].setdefault(c, 0.0)
     # 평균단가 갱신 (현재 라이브가 기준)
     prices = live.get_mids(uni)
     for c in uni:
@@ -123,7 +166,8 @@ def _mark_to_market(fund):
     """라이브 가격으로 평가 → equity + 코인별 손익."""
     fid = fund['id']
     rt = _runtime[fid]
-    uni = fund['universe']
+    _reconcile_delisted(fund, rt)  # 세션 중 새로 상장폐지되면 즉시 정산
+    uni = _active(fund, rt)        # 정산 자산은 마킹·손익적립에서 제외(동결)
     prices = live.get_mids(uni)
     if not prices:
         return
@@ -147,8 +191,7 @@ def _mark_to_market(fund):
             rt['avg_entry'][c] = prices[c]
     # 분 단위 NAV 기록 (규칙적 시계열, 같은 분 덮어쓰기)
     eq = rt['equity']
-    store.upsert_nav_minute(fund['id'], round(eq, 2),
-                            round((eq / rt['initial'] - 1) * 100, 4))
+    store.upsert_nav_minute(fund['id'], round(eq, 2), _retpct(eq, rt['initial'], 4))
 
 
 def submit_vote(fund, user, deposit, votes):
@@ -167,7 +210,7 @@ def _snapshot_nav(fund):
     rt = _runtime[fund['id']]
     eq = rt['equity']
     store.append_nav(fund['id'], int(time.time()), round(eq, 2),
-                     round((eq / rt['initial'] - 1) * 100, 3))
+                     _retpct(eq, rt['initial'], 3))
 
 
 def get_state(fund):
@@ -190,7 +233,7 @@ def get_state(fund):
                 'user': v['user'], 'deposit': v['deposit'],
                 'share_pct': round(share * 100, 1), 'votes': v['votes'],
                 'paper_value': round(eq * share, 2),
-                'ret_pct': round((eq / rt['initial'] - 1) * 100, 2),
+                'ret_pct': _retpct(eq, rt['initial']),
             })
         participants.sort(key=lambda x: x['paper_value'], reverse=True)
 
@@ -198,6 +241,22 @@ def get_state(fund):
         assets = {}
         gross = 0.0
         for c in uni:
+            if c in rt['settled']:
+                # 상장폐지로 정산된 자산: 동결 행 (비중 0, 손익은 정산 시점값 고정)
+                s = rt['settled'][c]
+                assets[c] = {
+                    'weight': 0.0, 'settled': True,
+                    'final_price': (round(s['final_price'], 4)
+                                    if s.get('final_price') else None),
+                    'successor': s.get('successor'),
+                    'return_pct': _pnlpct(rt['asset_pnl'][c], rt['initial']),
+                    'funding_carry': 0.0, 'avg_entry': None, 'price': None,
+                    'liq_price': None, 'liq_dist_pct': None,
+                    'max_leverage': reg.get(c, {}).get('max_leverage') or lev,
+                    'eff_leverage': lev,
+                    'quote': reg.get(c, {}).get('quote', 'USDC'),
+                }
+                continue
             w = rt['weights'][c]
             gross += abs(w)
             amax = reg.get(c, {}).get('max_leverage') or lev
@@ -214,7 +273,7 @@ def get_state(fund):
             liq_dist = round(abs(px - liq) / px * 100, 1) if liq and px else None
             assets[c] = {
                 'weight': round(w, 1),
-                'return_pct': round(rt['asset_pnl'][c] / rt['initial'] * 100, 2),
+                'return_pct': _pnlpct(rt['asset_pnl'][c], rt['initial']),
                 'funding_carry': round(contrib, 2),
                 'avg_entry': round(entry, 4) if entry else None,
                 'price': px, 'liq_price': round(liq, 4) if liq else None,
@@ -232,12 +291,12 @@ def get_state(fund):
             'fund': {k: fund[k] for k in ('id', 'name', 'kind', 'visibility',
                                           'profile', 'universe')},
             'leverage': lev, 'fund_equity': round(eq, 2),
-            'fund_return_pct': round((eq / rt['initial'] - 1) * 100, 2),
+            'fund_return_pct': _retpct(eq, rt['initial']),
             'funding_carry_annual_pct': round(carry_annual, 2),
             'cash_pct': cash_pct, 'target_cash_pct': target_cash,
-            'weights': {c: round(rt['weights'][c], 1) for c in uni},
+            'weights': {c: round(rt['weights'].get(c, 0.0), 1) for c in uni},
             'target': (None if rt['last_target'] is None
-                       else {c: round(rt['last_target'][c], 1) for c in uni}),
+                       else {c: round(rt['last_target'].get(c, 0.0), 1) for c in uni}),
             'assets': assets, 'participants': participants,
             'nav_history': nav, 'prices': prices,
         }
@@ -253,3 +312,58 @@ def reset_fund(fund):
             c.execute("DELETE FROM votes WHERE fund_id=?", (fid,))
             c.execute("DELETE FROM nav_history WHERE fund_id=?", (fid,))
         _runtime.pop(fid, None)
+
+
+def current_equity(fund):
+    """현재 평가 자산(런타임). 삭제 가능 여부(자금 0) 판단용."""
+    with _lock:
+        rt = _rt(fund)
+        _mark_to_market(fund)
+        return rt['equity']
+
+
+def redeem(fund, user):
+    """
+    참가자 지분 회수(출금/탈퇴). 그의 share 비율만큼 펀드 자본을 인출하고
+    투표를 삭제한다. (실제 주문 연동 전 페이퍼 인출 — 런타임 메모리 차감,
+    투표 삭제는 SQLite 영속. 전원 회수 시 자본 0 → 생성자가 펀드 삭제 가능.)
+
+    Returns: {redeemed, remaining, fund_equity} | None(참여 내역 없음)
+    """
+    with _lock:
+        rt = _rt(fund)
+        _mark_to_market(fund)
+        votes = store.get_votes(fund['id'])
+        mine = next((v for v in votes if v['user'] == user), None)
+        if not mine:
+            return None
+        total_dep = sum(v['deposit'] for v in votes) or 0
+        share = (mine['deposit'] / total_dep) if total_dep else 1.0
+        eq = rt['equity']
+        redeemed = eq * share
+        keep = max(0.0, 1.0 - share)
+        # 자본/초기/손익을 같은 비율로 축소 → 남은 참가자 가치·수익률 불변
+        rt['equity'] = eq * keep
+        rt['initial'] = rt['initial'] * keep
+        rt['asset_pnl'] = {c: p * keep for c, p in rt['asset_pnl'].items()}
+
+        store.delete_vote(fund['id'], user)
+        remaining = store.get_votes(fund['id'])
+        if remaining:
+            _aggregate(fund)
+        else:
+            # 전원 회수 → 빈 펀드 (비중 0, 전액 현금, 자본 0)
+            for c in fund['universe']:
+                rt['weights'][c] = 0.0
+            rt['last_target'] = None
+            rt['target_cash'] = 100.0
+        _mark_to_market(fund)
+        return {'redeemed': round(redeemed, 2),
+                'remaining': len(remaining),
+                'fund_equity': round(rt['equity'], 2)}
+
+
+def drop_runtime(fund_id):
+    """펀드 삭제 시 런타임 캐시 정리."""
+    with _lock:
+        _runtime.pop(fund_id, None)

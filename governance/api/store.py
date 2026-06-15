@@ -132,6 +132,12 @@ def get_votes(fund_id):
                  'votes': json.loads(r['votes'])} for r in rows]
 
 
+def delete_vote(fund_id, user):
+    """참가자 1명의 투표/예치 삭제 (지분 회수=출금 시)."""
+    with _lock, _conn() as c:
+        c.execute("DELETE FROM votes WHERE fund_id=? AND user=?", (fund_id, user))
+
+
 def funds_for_user(user):
     """해당 user가 만들었거나 투표한 펀드 id 집합."""
     with _lock, _conn() as c:

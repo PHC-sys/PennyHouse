@@ -36,9 +36,29 @@ export default function FundDetailPage() {
     refresh();
   }
   async function reset() { await api(`/api/funds/${id}/reset`, { method: 'POST' }); refresh(); }
+  async function redeem() {
+    if (!confirm('내 지분을 회수(출금)하고 펀드에서 나갑니다. 계속할까요?')) return;
+    try {
+      const r = await api(`/api/funds/${id}/redeem`, {
+        method: 'POST', body: JSON.stringify({ user: me }) });
+      alert(`회수 완료: ${fmtUsd(r.redeemed)} (남은 참가자 ${r.remaining}명)`);
+      refresh();
+    } catch (e) { alert(e.message); }
+  }
+  async function removeFund() {
+    if (!confirm('이 펀드를 영구 삭제합니다. 되돌릴 수 없어요. 계속할까요?')) return;
+    try {
+      await api(`/api/funds/${id}?user=${encodeURIComponent(me)}`, { method: 'DELETE' });
+      router.push('/paper');
+    } catch (e) { alert(e.message); }
+  }
 
   if (!fund) return <div className="text-muted">로딩 중…</div>;
   const uni = fund.universe;
+  const isParticipant = (state?.participants || []).some((p) => p.user === me);
+  const isCreator = !!fund.creator && fund.creator === me;
+  const canDelete = isCreator && state != null
+    && (state.fund_equity <= 1e-6 || (state.participants || []).length === 0);
   const navData = (state?.nav_history || []).map((p) => ({ time: p.t, value: p.ret_pct }));
 
   return (
@@ -49,6 +69,11 @@ export default function FundDetailPage() {
         <span className="chip">{fund.kind === 'demo' ? 'Demo' : '실제'}</span>
         <span className="chip">{fund.visibility === 'private' ? '🔒 Private' : 'Public'}</span>
         <span className="chip">{state ? `${state.leverage}x` : ''}</span>
+        {canDelete && (
+          <button className="btn-ghost py-1 text-short ml-auto" onClick={removeFund}>
+            펀드 삭제 (자금 0)
+          </button>
+        )}
       </div>
 
       <div className="grid lg:grid-cols-2 gap-5">
@@ -82,9 +107,17 @@ export default function FundDetailPage() {
           </div>
 
           <div className="divide-y divide-border">
-            {uni.map((c) => (
+            {uni.map((c) => {
+              const settled = state?.assets?.[c]?.settled;
+              return (
               <div key={c} className="flex items-center gap-2 py-2">
                 <span className="font-bold w-16 text-sm">{c.split(':').pop()}</span>
+                {settled ? (
+                  <div className="flex-1 text-xs text-muted py-1.5">
+                    <span className="px-1.5 py-0.5 rounded bg-muted/20 text-[10px]">상장폐지 · 정산됨</span>
+                    <span className="ml-1">최종가 현금 정산 — 투표 불가</span>
+                  </div>
+                ) : (
                 <div className="flex gap-1 flex-1">
                   {STANCE.map(([l, v]) => {
                     const sel = votes[c] === v;
@@ -97,10 +130,15 @@ export default function FundDetailPage() {
                       onClick={() => setVotes((p) => ({ ...p, [c]: v }))}>{l}</button>;
                   })}
                 </div>
+                )}
               </div>
-            ))}
+              );
+            })}
           </div>
           <button className="btn-primary w-full" onClick={submit}>투표 제출 / 갱신</button>
+          {isParticipant && (
+            <button className="btn-ghost w-full text-short" onClick={redeem}>내 지분 회수 (출금·탈퇴)</button>
+          )}
           <button className="btn-ghost w-full" onClick={reset}>세션 초기화</button>
         </div>
 
@@ -132,6 +170,17 @@ export default function FundDetailPage() {
                   const a = state?.assets?.[c] || {};
                   const w = a.weight ?? 0;
                   const near = a.liq_dist_pct != null && a.liq_dist_pct < 10;
+                  if (a.settled) return (
+                    <tr key={c} className="border-t border-border/60 text-muted">
+                      <td className="py-1.5 font-bold">{c.split(':').pop()}
+                        <span className="ml-1 text-[8px] px-1 py-0.5 rounded bg-muted/20">정산됨</span></td>
+                      <td className="text-right stat-num">0%</td>
+                      <td className={`text-right stat-num ${cls(a.return_pct)}`}>{a.return_pct != null ? fmtPct(a.return_pct) : '—'}</td>
+                      <td className="text-right">—</td>
+                      <td className="text-right stat-num" title="상장폐지 최종가">{a.final_price != null ? smartNum(a.final_price) : '—'}</td>
+                      <td className="text-right">—</td>
+                    </tr>
+                  );
                   return (
                     <tr key={c} className="border-t border-border/60">
                       <td className="py-1.5 font-bold">{c.split(':').pop()}
