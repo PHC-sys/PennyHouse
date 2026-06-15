@@ -88,13 +88,50 @@ def _active(fund, rt):
     return [c for c in fund['universe'] if c not in rt['settled']]
 
 
+_RT_KEYS = ('weights', 'equity', 'asset_pnl', 'avg_entry', 'last_prices',
+            'last_target', 'initial', 'settled', 'target_cash')
+_last_save = {}     # fund_id -> 마지막 스냅샷 저장 시각 (쓰기 쓰로틀)
+_SAVE_EVERY = 8.0   # 초
+
+
+def _restore_runtime(fund, snap):
+    """저장된 스냅샷 → 런타임 dict (유니버스 키 보강)."""
+    rt = _fresh_runtime(fund)
+    for k in _RT_KEYS:
+        if k in snap:
+            rt[k] = snap[k]
+    rt.setdefault('settled', {})
+    uni = fund['universe']
+    for c in uni:  # 유니버스 키 누락 방지 (방어적)
+        rt['weights'].setdefault(c, 0.0)
+        rt['asset_pnl'].setdefault(c, 0.0)
+        rt['avg_entry'].setdefault(c, None)
+    return rt
+
+
+def _save_runtime(fund, force=False):
+    """런타임 스냅샷 영속화 (쓰로틀). 재시작 시 라이브 평가 이어짐."""
+    fid = fund['id']
+    now = time.time()
+    if not force and now - _last_save.get(fid, 0) < _SAVE_EVERY:
+        return
+    _last_save[fid] = now
+    rt = _runtime[fid]
+    store.save_runtime(fid, {k: rt.get(k) for k in _RT_KEYS})
+
+
 def _rt(fund):
-    """펀드 런타임 상태 (없으면 생성 + 기존 투표 반영)."""
+    """펀드 런타임 상태 (없으면 스냅샷 복원 → 없으면 생성 + 기존 투표 반영)."""
     fid = fund['id']
     if fid not in _runtime:
-        _runtime[fid] = _fresh_runtime(fund)
-        _reconcile_delisted(fund, _runtime[fid])
-        _aggregate(fund)  # 저장된 투표로 목표 비중 1회 반영
+        snap = store.load_runtime(fid)
+        if snap:
+            _runtime[fid] = _restore_runtime(fund, snap)
+            _reconcile_delisted(fund, _runtime[fid])  # 다운된 새 상장폐지 반영
+        else:
+            _runtime[fid] = _fresh_runtime(fund)
+            _reconcile_delisted(fund, _runtime[fid])
+            _aggregate(fund)  # 저장된 투표로 목표 비중 1회 반영
     return _runtime[fid]
 
 
@@ -192,6 +229,7 @@ def _mark_to_market(fund):
     # 분 단위 NAV 기록 (규칙적 시계열, 같은 분 덮어쓰기)
     eq = rt['equity']
     store.upsert_nav_minute(fund['id'], round(eq, 2), _retpct(eq, rt['initial'], 4))
+    _save_runtime(fund)  # 런타임 스냅샷 영속(쓰로틀) → 재시작해도 평가 이어짐
 
 
 def submit_vote(fund, user, deposit, votes):
@@ -204,6 +242,7 @@ def submit_vote(fund, user, deposit, votes):
         _rt(fund)
         _aggregate(fund)
         _mark_to_market(fund)  # 내부에서 분 단위 NAV 기록
+        _save_runtime(fund, force=True)  # 투표 직후 즉시 영속
 
 
 def _snapshot_nav(fund):
@@ -311,7 +350,9 @@ def reset_fund(fund):
         with st._lock, st._conn() as c:
             c.execute("DELETE FROM votes WHERE fund_id=?", (fid,))
             c.execute("DELETE FROM nav_history WHERE fund_id=?", (fid,))
+        store.delete_runtime(fid)  # 스냅샷도 비움 (리셋이 진짜 리셋되게)
         _runtime.pop(fid, None)
+        _last_save.pop(fid, None)
 
 
 def current_equity(fund):
@@ -358,12 +399,14 @@ def redeem(fund, user):
             rt['last_target'] = None
             rt['target_cash'] = 100.0
         _mark_to_market(fund)
+        _save_runtime(fund, force=True)  # 회수 결과 즉시 영속
         return {'redeemed': round(redeemed, 2),
                 'remaining': len(remaining),
                 'fund_equity': round(rt['equity'], 2)}
 
 
 def drop_runtime(fund_id):
-    """펀드 삭제 시 런타임 캐시 정리."""
+    """펀드 삭제 시 런타임 캐시 정리. (영속 스냅샷은 store.delete_fund가 제거)"""
     with _lock:
         _runtime.pop(fund_id, None)
+        _last_save.pop(fund_id, None)

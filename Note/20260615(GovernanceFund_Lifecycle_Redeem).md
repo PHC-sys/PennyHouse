@@ -52,6 +52,18 @@ USOIL 평단·청산가 누락(버그) → 라이브 워커 전 dex 동적 구�
 3. redeem: alice 회수 → equity 100k→75k, bob 가치 75k 보존.
 4. delete: 자금남음 400 → 전원회수 → 비생성자 403 → 생성자+자금0 200 → GET 404.
 
+## 런타임 스냅샷 영속화 (같은 날 추가)
+- 증상: "코드 수정하면 라이브 테스트하던 펀드가 사라진다."
+- 진단: 펀드 자체(메타/투표/NAV)는 SQLite라 멀쩡. 사라진 건 **런타임 평가상태**
+  (equity/평단/손익) — 메모리라 백엔드 재시작마다 리셋됐던 것. DB가 지워지는 게 아님
+  (governance.db는 governance/.gitignore의 *.db로 무시, git이 안 건드림).
+- 해결: fund_runtime 테이블에 런타임 JSON 스냅샷 저장·복원.
+  · 저장: _mark_to_market 쓰로틀(8s) + 투표/회수 직후 force.
+  · 복원: _rt가 메모리에 없으면 load_runtime → 있으면 그대로 복원(+상장폐지 재반영),
+          없으면 기존대로 fresh+aggregate.
+  · reset/delete 시 스냅샷도 삭제. redeem으로 줄인 initial/equity도 보존됨.
+- 검증: 펀드 생성·투표(BTC평단 65539.5) → 서버 kill/재시작 → 평단 65539.5 그대로 복원.
+
 ## 다음
 - 미해결: 자산 분류/검색 별칭(2번 — SpaceX→SPCX 등).
 - 4차 리플레이 착수 후보. 전체: docs/specs/GovernanceFund_Platform_roadmap.md

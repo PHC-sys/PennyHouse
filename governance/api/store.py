@@ -60,6 +60,11 @@ def init_db():
             address TEXT NOT NULL,
             PRIMARY KEY (fund_id, address)
         );
+        CREATE TABLE IF NOT EXISTS fund_runtime (
+            fund_id TEXT PRIMARY KEY,             -- 펀드 런타임 스냅샷(영속)
+            data    TEXT NOT NULL,                -- JSON: equity/weights/asset_pnl/avg_entry/...
+            updated REAL NOT NULL
+        );
         CREATE INDEX IF NOT EXISTS idx_nav ON nav_history(fund_id, t);
         """)
 
@@ -105,8 +110,29 @@ def list_funds():
 
 def delete_fund(fund_id):
     with _lock, _conn() as c:
-        for t in ('funds', 'votes', 'nav_history', 'allowlist'):
+        for t in ('funds', 'votes', 'nav_history', 'allowlist', 'fund_runtime'):
             c.execute(f"DELETE FROM {t} WHERE {'id' if t=='funds' else 'fund_id'}=?", (fund_id,))
+
+
+# ── 런타임 스냅샷 (재시작해도 라이브 평가 이어지게) ─────────────────
+def save_runtime(fund_id, data):
+    """펀드 런타임 상태(equity/비중/손익/평단 등) JSON 영속화."""
+    with _lock, _conn() as c:
+        c.execute("""INSERT INTO fund_runtime (fund_id,data,updated) VALUES (?,?,?)
+            ON CONFLICT(fund_id) DO UPDATE SET data=excluded.data, updated=excluded.updated""",
+            (fund_id, json.dumps(data), time.time()))
+
+
+def load_runtime(fund_id):
+    """저장된 런타임 스냅샷 (없으면 None)."""
+    with _lock, _conn() as c:
+        r = c.execute("SELECT data FROM fund_runtime WHERE fund_id=?", (fund_id,)).fetchone()
+        return json.loads(r['data']) if r else None
+
+
+def delete_runtime(fund_id):
+    with _lock, _conn() as c:
+        c.execute("DELETE FROM fund_runtime WHERE fund_id=?", (fund_id,))
 
 
 def get_allowlist(fund_id):
