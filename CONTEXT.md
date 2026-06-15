@@ -171,25 +171,20 @@ npm run dev   # localhost:3001
 - 프로파일: 공격적 T=7일/MAX 80%/5x, 보수적 T=21일/MAX 60%/2x
 - 레버리지: 코인별 동일(전체 레버리지 고정), 롱/숏 양방향
 
-#### GovernanceFund 진행 상황
-1. ✅ governance_engine 모듈 추출 (노트북 → `governance/engine/*.py`)
-2. ✅ 백테스트 + 페이퍼 트레이딩 사이트 (FastAPI 백엔드)
-3. ✅ 데이터 레이어 확장 (캔들 페이지네이션, 펀딩비, 상대가격, interval, 신규 시나리오)
-4. ✅ Next.js + Tailwind 프리미엄 프론트 재구축 (`governance/web-next`)
-5. ⬜ 상업용 플랫폼 확장 → `docs/specs/GovernanceFund_Platform_roadmap.md` (← 현재)
-6. ⬜ AI Keeper 프로토타입 / 온체인 컨트랙트
-
-#### governance/ 구조 (2026-06-11 현재)
+#### governance/ 구조 (2026-06-16 현재)
 ```
-engine/    profiles, alpha, voting, prices, scenarios, backtest (검증된 핵심 로직)
-api/       main.py(엔드포인트), paper.py(페이퍼 상태 인메모리)
-web/       구버전 정적 프론트 (대체 예정, 아직 보존)
-web-next/  ★ Next.js14 + Tailwind 프리미엄 프론트 (현행)
+engine/    profiles, alpha, voting, prices, scenarios, backtest, assets (검증된 핵심 로직)
+api/       main.py(엔드포인트), live.py(WS 라이브워커), store.py(SQLite),
+           funds.py(펀드별 운용 엔진)   ※ 구 paper.py 제거됨
+web-next/  ★ Next.js14 + Tailwind 프론트 (유일)
+             app/ page(백테스트)·paper(펀드목록)·paper/[id](펀드상세)·market
+             components/ Charts·TopNav·AssetModal·AssetPicker(⌘K)·CreateFundModal·useLive·useMe
 tests/     test_engine.py (assert 검증 통과)
+governance.db  SQLite (gitignore, 첫 실행 시 자동 생성+Demo 시드)
 ```
 실행:
 - 백엔드: `python -m uvicorn governance.api.main:app --port 8099`
-- 프론트: `cd governance/web-next && npm run dev` → http://localhost:3010
+- 프론트: `cd governance/web-next && npm install && npm run dev` → http://localhost:3010
   (Next가 /api/* 를 8099로 프록시)
 
 #### 상업용 플랫폼 빌드 순서 (확정, 2026-06-11)
@@ -208,9 +203,28 @@ tests/     test_engine.py (assert 검증 통과)
         ✅ 3-4 현금(Cash) 투표 + 라이브 NAV(분단위 영속)
             + 자산별 레버리지 캡/청산가(가격)/결제통화(USDC·USDH)/펀딩캐시
         ✅ 정리: 구 단일 paper.py·정적 web/ 제거, 차트 시간축(timeVisible)
-⬜ 4차: 리플레이 모드 (게임형 과거 트레이딩) ← 다음
-⬜ 4차: 리플레이 모드 (게임형 과거 트레이딩)
+⬜ 4차: 리플레이 모드 (게임형 과거 트레이딩) ← 다음 후보
 ⬜ 5차: 지갑 서명 인증 (Private 펀드)
+⬜ 6차: 운영자 어드민 (초대제/가입 승인제)
+```
+
+#### ★ 다음 세션에서 정할 것 (2026-06-13 미해결)
+```
+1) Pre-IPO 자산 생애주기 (★ 우선 논의)
+   - Pre-IPO perp은 해당 기업이 IPO되면 delisted → 실제 주식으로 전환됨
+   - 예: vntl:SPACEX가 delisted(거래량0)된 건 "죽은 게 아니라 IPO 전환" 맥락일 수 있음
+   - 현재 우리는 isDelisted 자산을 그냥 제외 → 이벤트성(IPO) delisting과 진짜 폐기 구분 필요
+   - 질문: IPO 전환 시 자동으로 stock으로 연결? 그 자산 담은 펀드는?
+   - 단순 분류 버그가 아니라 "Pre-IPO 자산을 플랫폼이 어떻게 다룰까" 설계 주제
+
+2) 자산 분류 vs HL 일치 문제
+   - HL API엔 카테고리 필드 없음 → 키워드(_classify)로 복제 중 → 빈틈 생김
+   - 옵션: A) 키워드 정교화  B) dex 기반 대분류  C) 검색에 회사명 별칭(SpaceX→SPCX)
+   - "SPACE" 검색이 "SPCX"(티커) 못 찾는 문제도 여기 포함
+
+3) 거래량 0(죽은 마켓) 자산 처리 정책 (위 1번과 연동)
+
+→ 오늘 할 일: 위 셋(특히 1) 방향 정하거나, 4차 리플레이 착수.
 ```
 
 #### ★ 핵심 설계 통찰 — DB(페이퍼) vs 블록체인(실제)
