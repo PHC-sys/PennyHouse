@@ -21,6 +21,7 @@ from .scenarios import (
 from .backtest import run_backtest, calc_metrics
 from .assets import (fetch_universe, compute_volatility, asset_sparkline,
                      batch_sparklines, delisted_map, successor_of)
+from .simulate import run_simulation
 
 __all__ = [
     'VOLATILITY', 'COINS', 'FUND_PROFILES',
@@ -35,5 +36,5 @@ __all__ = [
     'make_generator', 'make_custom_generator',
     'run_backtest', 'calc_metrics',
     'fetch_universe', 'compute_volatility', 'asset_sparkline', 'batch_sparklines',
-    'delisted_map', 'successor_of',
+    'delisted_map', 'successor_of', 'run_simulation',
 ]
