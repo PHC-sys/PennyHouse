@@ -27,7 +27,9 @@ def _hourly_panel(assets, start, end):
     """자산별 시간당 종가·펀딩요율을 공통 시간그리드로 정렬."""
     idx = pd.date_range(pd.to_datetime(start, unit='s', utc=True).floor('h'),
                         pd.to_datetime(end, unit='s', utc=True).floor('h'), freq='h')
-    span_days = max(1, (end - start) // 86400 + 2)
+    # fetch_candles/funding은 '지금'까지의 최근 N일을 반환 → 과거 구간(start)을
+    # 덮으려면 (end−start)가 아니라 (now−start)만큼 가져와야 함.
+    span_days = max(1, (int(time.time()) - start) // 86400 + 2)
     price, funding = {}, {}
     for a in assets:
         c = fetch_candles(a, days=span_days, interval='1h')
@@ -68,8 +70,9 @@ def hedge_beta(long_assets, short_assets, start, end=None):
     ※ 같은 구간 in-sample β (낙관적 — 룩어헤드). 전향 추정은 플립규칙 단계에서.
     """
     end = end or int(time.time())
-    _, P, _ = _hourly_panel(long_assets + short_assets, start, end)
-    if P is None or len(P) < 5:
+    need = long_assets + short_assets
+    _, P, _ = _hourly_panel(need, start, end)
+    if P is None or len(P) < 5 or any(a not in P.columns for a in need):
         return None
     PR = P.pct_change().dropna()
     rL = PR[long_assets].mean(axis=1)   # 등가중 롱바스켓 수익률
