@@ -144,6 +144,43 @@ def get_price(symbol):
         return LIVE_MIDS.get(symbol)
 
 
+def get_marks(symbols=None):
+    """
+    마크가(markPx) 스냅샷 — 포지션 시가평가용 (HL도 손익/청산을 markPx로 계산).
+    activeAssetCtx 구독이 있으면 그 markPx, 없으면 allMids mid로 폴백.
+    HIP-3(TradFi·Pre-IPO) 저유동성 자산은 mid가 mark와 벌어져 mid로 마킹하면
+    손익이 안 움직임 → mark 우선이 정답.
+    """
+    with _lock:
+        syms = list(symbols) if symbols else list(LIVE_MIDS.keys())
+        out = {}
+        for s in syms:
+            c = LIVE_CTX.get(s)
+            if c and c.get('markPx'):
+                try:
+                    out[s] = float(c['markPx'])
+                    continue
+                except (TypeError, ValueError):
+                    pass
+            if s in LIVE_MIDS:
+                out[s] = LIVE_MIDS[s]
+        return out
+
+
+def ensure_ctx(symbols):
+    """펀드 보유 자산의 markPx가 흐르도록 activeAssetCtx 구독 보장(멱등).
+    이미 구독된 심볼은 건너뜀(refcount 미증가). 워커 재접속 시 _on_open이 재구독."""
+    new = []
+    with _lock:
+        for s in symbols:
+            if s not in _ctx_refs:
+                _ctx_refs[s] = 1
+                new.append(s)
+    for s in new:
+        _send({'method': 'subscribe',
+               'subscription': {'type': 'activeAssetCtx', 'coin': s}})
+
+
 def status():
     with _lock:
         return {'count': len(LIVE_MIDS), 'updated': LIVE_UPDATED,

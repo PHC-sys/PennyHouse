@@ -124,6 +124,7 @@ def _rt(fund):
     """펀드 런타임 상태 (없으면 스냅샷 복원 → 없으면 생성 + 기존 투표 반영)."""
     fid = fund['id']
     if fid not in _runtime:
+        live.ensure_ctx(fund['universe'])  # 보유 자산 markPx 라이브 구독 보장
         snap = store.load_runtime(fid)
         if snap:
             _runtime[fid] = _restore_runtime(fund, snap)
@@ -167,7 +168,7 @@ def _aggregate(fund):
     for c in rt['settled']:
         rt['weights'].setdefault(c, 0.0)
     # 평균단가 갱신 (현재 라이브가 기준)
-    prices = live.get_mids(uni)
+    prices = live.get_marks(uni)  # mid 아닌 markPx로 시가평가 (HIP-3 손익 정확)
     for c in uni:
         px = prices.get(c)
         w = rt['weights'][c]
@@ -205,7 +206,7 @@ def _mark_to_market(fund):
     rt = _runtime[fid]
     _reconcile_delisted(fund, rt)  # 세션 중 새로 상장폐지되면 즉시 정산
     uni = _active(fund, rt)        # 정산 자산은 마킹·손익적립에서 제외(동결)
-    prices = live.get_mids(uni)
+    prices = live.get_marks(uni)  # mid 아닌 markPx로 시가평가 (HIP-3 손익 정확)
     if not prices:
         return
     last = rt['last_prices']
