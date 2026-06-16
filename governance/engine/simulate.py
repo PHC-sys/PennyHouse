@@ -61,6 +61,38 @@ def _weight_matrix(positions, idx, cols):
     return W, LEV
 
 
+def hedge_beta(long_assets, short_assets, start, end=None):
+    """
+    롱바스켓 vs 숏바스켓 시간당 수익률 회귀 → 헷지비율 β + 헷지품질 R².
+    β = cov(rL, rS)/var(rS).  숏:롱 노셔널 = β:1 이면 공통팩터(방향성) 상쇄.
+    ※ 같은 구간 in-sample β (낙관적 — 룩어헤드). 전향 추정은 플립규칙 단계에서.
+    """
+    end = end or int(time.time())
+    _, P, _ = _hourly_panel(long_assets + short_assets, start, end)
+    if P is None or len(P) < 5:
+        return None
+    PR = P.pct_change().dropna()
+    rL = PR[long_assets].mean(axis=1)   # 등가중 롱바스켓 수익률
+    rS = PR[short_assets].mean(axis=1)
+    var_s = float(rS.var())
+    if var_s <= 0:
+        return None
+    beta = float(rL.cov(rS) / var_s)
+    corr = float(rL.corr(rS))
+    return {'beta': round(beta, 4), 'r2': round(corr * corr, 4), 'corr': round(corr, 4),
+            'vol_long': round(float(rL.std()), 5), 'vol_short': round(float(rS.std()), 5)}
+
+
+def beta_weights(long_assets, short_assets, beta, gross=200.0):
+    """헷지비율 β로 비중 구성 (롱:숏 노셔널 = 1:β, gross 고정)."""
+    b = max(beta, 1e-6)
+    lw = gross / (1 + b) / len(long_assets)
+    sw = -gross * b / (1 + b) / len(short_assets)
+    w = {a: round(lw, 4) for a in long_assets}
+    w.update({a: round(sw, 4) for a in short_assets})
+    return w
+
+
 def run_simulation(assets, positions, start, end=None, initial=100000.0,
                    reg=None, fees=None):
     """
