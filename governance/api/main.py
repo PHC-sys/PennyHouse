@@ -13,6 +13,7 @@ GovernanceFund 백테스트 & 페이퍼 트레이딩 API.
 import os
 import sys
 import time
+import threading
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
@@ -45,6 +46,24 @@ def _startup():
     live.start_worker()  # HL WebSocket 라이브 가격 워커 기동
     store.init_db()
     _seed_demo_fund()
+    threading.Thread(target=_prewarm_loop, daemon=True, name='fund-prewarm').start()
+
+
+def _prewarm_loop():
+    """백그라운드 투영 워커 — 전 펀드를 주기적으로 재구성해 캐시를 따뜻하게 유지.
+    덕분에 목록/상세 서빙은 항상 웜 캐시를 읽어 즉시 응답(콜드 스타트 제거).
+    수집(live 워커)·투영(여기)·서빙(API)을 분리하는 패턴."""
+    time.sleep(3)  # 라이브 워커가 mids 채울 시간
+    while True:
+        try:
+            for f in store.list_funds():
+                try:
+                    funds_engine.get_state(f)  # 재구성 → 캔들/nav 캐시 예열
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        time.sleep(45)
 
 
 def _seed_demo_fund():

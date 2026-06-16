@@ -16,13 +16,16 @@ export default function FundListPage() {
   const router = useRouter();
   const [me] = useMe();
   const [funds, setFunds] = useState([]);
+  const [loaded, setLoaded] = useState(false);
   const [tab, setTab] = useState('all');
   const [creating, setCreating] = useState(false);
 
   function load() {
     if (!me) return;
     api(`/api/funds?user=${encodeURIComponent(me)}`)
-      .then((d) => setFunds(d.funds || [])).catch(() => setFunds([]));
+      .then((d) => setFunds(d.funds || []))
+      .catch(() => setFunds([]))
+      .finally(() => setLoaded(true));
   }
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [me]);
 
@@ -84,7 +87,8 @@ export default function FundListPage() {
             </div>
           </div>
         ))}
-        {!shown.length && <div className="text-muted">펀드가 없습니다. 개설해보세요.</div>}
+        {!loaded && <div className="text-muted animate-pulse">펀드 불러오는 중…</div>}
+        {loaded && !shown.length && <div className="text-muted">펀드가 없습니다. 개설해보세요.</div>}
       </div>
 
       {creating && (
