@@ -61,11 +61,18 @@ def init_db():
             PRIMARY KEY (fund_id, address)
         );
         CREATE TABLE IF NOT EXISTS fund_runtime (
-            fund_id TEXT PRIMARY KEY,             -- 펀드 런타임 스냅샷(영속)
-            data    TEXT NOT NULL,                -- JSON: equity/weights/asset_pnl/avg_entry/...
+            fund_id TEXT PRIMARY KEY,             -- 펀드 런타임 캐시(파생값, 영속)
+            data    TEXT NOT NULL,                -- JSON: weights/settled/avg_entry...
             updated REAL NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS fund_events (
+            fund_id TEXT NOT NULL,                -- ★ 불변 이벤트 원장 (진실의 원천)
+            t       INTEGER NOT NULL,             -- 발생 시각(sec)
+            kind    TEXT NOT NULL,                -- rebalance | redeem
+            data    TEXT NOT NULL                 -- JSON: rebalance={weights,leverage} redeem={keep}
+        );
         CREATE INDEX IF NOT EXISTS idx_nav ON nav_history(fund_id, t);
+        CREATE INDEX IF NOT EXISTS idx_evt ON fund_events(fund_id, t);
         """)
 
 
@@ -110,8 +117,29 @@ def list_funds():
 
 def delete_fund(fund_id):
     with _lock, _conn() as c:
-        for t in ('funds', 'votes', 'nav_history', 'allowlist', 'fund_runtime'):
+        for t in ('funds', 'votes', 'nav_history', 'allowlist', 'fund_runtime', 'fund_events'):
             c.execute(f"DELETE FROM {t} WHERE {'id' if t=='funds' else 'fund_id'}=?", (fund_id,))
+
+
+# ── 이벤트 원장 (NAV 재구성의 진실의 원천) ─────────────────────────
+def append_event(fund_id, t, kind, data):
+    """불변 이벤트 추가 (rebalance/redeem). NAV는 이 원장+가격으로 재구성."""
+    with _lock, _conn() as c:
+        c.execute("INSERT INTO fund_events (fund_id,t,kind,data) VALUES (?,?,?,?)",
+                  (fund_id, int(t), kind, json.dumps(data)))
+
+
+def get_events(fund_id):
+    """펀드 이벤트 원장 (시각 오름차순)."""
+    with _lock, _conn() as c:
+        rows = c.execute("SELECT t,kind,data FROM fund_events WHERE fund_id=? ORDER BY t,rowid",
+                         (fund_id,)).fetchall()
+        return [{'t': r['t'], 'kind': r['kind'], 'data': json.loads(r['data'])} for r in rows]
+
+
+def count_events(fund_id):
+    with _lock, _conn() as c:
+        return c.execute("SELECT COUNT(*) FROM fund_events WHERE fund_id=?", (fund_id,)).fetchone()[0]
 
 
 # ── 런타임 스냅샷 (재시작해도 라이브 평가 이어지게) ─────────────────
