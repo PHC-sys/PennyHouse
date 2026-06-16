@@ -29,7 +29,7 @@ PAIRS = {
 }
 DAYS = 120          # 과거 조회 기간
 ENTRY = 50.0        # 진입: |스프레드| 연환산 % 초과 (괴리)
-HORIZON = 3         # 진입일부터 추적 일수
+HORIZON = 4         # 진입일부터 추적 일수 (D, D+1, D+2, D+3)
 LEVERAGE = 3
 INIT = 100000.0
 FEES = {'taker': 0.00045, 'maker': 0.00015, 'p_maker': 0.5}
@@ -65,10 +65,12 @@ def study(name, long, short):
         if abs(s) > ENTRY and abs(sp) <= ENTRY:
             events.append(days[i])
 
+    labels = ['D', 'D+1', 'D+2', 'D+3']    # 진입일부터 누적 (D=진입~+1일)
     print(f'\n[{name}]  진입임계 |spread|>{ENTRY}% · {LEVERAGE}x · 베타가중 · 진입 {len(events)}건')
     if not events:
         print('  (괴리 이벤트 없음 — 임계 낮추거나 데이터 확인)'); return
-    print('  날짜        방향       진입spread |  D+1 펀딩/MTM/계  |  D+2 펀딩/MTM/계  |  D+3 펀딩/MTM/계  | spread D+1/2/3')
+    print('  날짜        방향     진입sprd | ' +
+          ' | '.join('%s 펀딩/MTM/계' % L for L in labels) + ' | spread경로')
 
     agg = {d: {'f': [], 'm': [], 't': []} for d in range(1, HORIZON + 1)}
     for t0 in events:
@@ -90,21 +92,19 @@ def study(name, long, short):
             f, m, tot = _pct(r['totals']['funding']), _pct(r['totals']['price']), r['totals']['ret_pct']
             agg[d]['f'].append(f); agg[d]['m'].append(m); agg[d]['t'].append(tot)
             cells.append('%+5.2f/%+5.2f/%+5.2f' % (f, m, tot))
-        # 스프레드 D+1/2/3
         sp_path = []
+        fut = spread[spread.index > t0]
         for d in range(1, HORIZON + 1):
-            fut = spread[spread.index > t0]
             sp_path.append('%+.0f' % fut.iloc[d - 1] if len(fut) >= d else '·')
-        print('  %s  %-8s %+7.0f%% | %s | %s | %s | %s'
-              % (t0.strftime('%Y-%m-%d'), label, s0,
-                 cells[0], cells[1] if len(cells) > 1 else '', cells[2] if len(cells) > 2 else '',
-                 '/'.join(sp_path)))
+        print('  %s  %-7s %+6.0f%% | %s | %s'
+              % (t0.strftime('%Y-%m-%d'), label, s0, ' | '.join(cells), '/'.join(sp_path)))
 
     print('  ── 평균 (전 이벤트, 진입일부터 누적 %, MTM+면 수렴/MTM−면 추세) ──')
     for d in range(1, HORIZON + 1):
         if agg[d]['t']:
-            print('    D+%d: 펀딩 %+.2f%% | MTM %+.2f%% | 계 %+.2f%%  (n=%d)'
-                  % (d, np.mean(agg[d]['f']), np.mean(agg[d]['m']), np.mean(agg[d]['t']), len(agg[d]['t'])))
+            print('    %-4s: 펀딩 %+.2f%% | MTM %+.2f%% | 계 %+.2f%%  (n=%d)'
+                  % (labels[d - 1], np.mean(agg[d]['f']), np.mean(agg[d]['m']),
+                     np.mean(agg[d]['t']), len(agg[d]['t'])))
 
 
 REG = None
