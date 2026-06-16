@@ -139,7 +139,8 @@ _FUNDING_TTL = 600  # 10분 (펀딩은 자주 안 변함)
 def fetch_funding_history(coin, days=90):
     """
     HL fundingHistory로 펀딩비 시계열 수집.
-    8시간마다 1건, 요청당 500건 제한(약 166일) → 페이지네이션으로 긴 기간 수집.
+    ★ HL은 펀딩을 매시간(1h) 정산 → 1시간마다 1건 (실측 확인). 요청당 500건
+    제한(약 20일) → 페이지네이션으로 긴 기간 수집.
 
     Returns:
         pd.DataFrame[fundingRate] (UTC 인덱스), 실패 시 None.
