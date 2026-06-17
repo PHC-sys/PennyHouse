@@ -3,3 +3,6 @@ node_modules/
 artifacts/
 cache/
 typechain-types/
+
+# FSSC 생성 데이터(재생성 가능)
+backtest/FSSC/*.xlsx
