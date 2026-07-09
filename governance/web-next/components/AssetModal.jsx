@@ -10,7 +10,7 @@ const INTERVAL_SEC = { '1h': 3600, '4h': 14400, '1d': 86400, '1w': 604800 };
 const FMT = smartNum;
 
 export default function AssetModal({ asset, onClose }) {
-  const [interval, setInterval] = useState('1d');
+  const [interval, setBarInterval] = useState('1d');  // ※ setInterval(전역) 가리지 않게 개명
   const [days, setDays] = useState(180);
   const [candles, setCandles] = useState([]);
   const [funding, setFunding] = useState([]);
@@ -110,7 +110,7 @@ export default function AssetModal({ asset, onClose }) {
               <div className="flex gap-1.5">
                 {INTERVALS.map((iv) => (
                   <span key={iv} className={`chip ${interval === iv ? 'chip-active' : ''}`}
-                    onClick={() => setInterval(iv)}>{iv}</span>))}
+                    onClick={() => setBarInterval(iv)}>{iv}</span>))}
               </div>
               <select className="input py-1 text-xs ml-auto" value={days}
                 onChange={(e) => setDays(+e.target.value)}>
