@@ -297,8 +297,12 @@ def get_state(fund):
                    if entry and abs(w) > 1e-9 and elev > 1 else None)
             px = marks.get(c)
             liq_dist = round(abs(px - liq) / px * 100, 1) if liq and px else None
+            # 수익률 = 평단 대비 포지션 ROE% (방향×(현재가/평단−1)×레버) — 거래소 포지션 표시 방식.
+            # ※ asset_pnl/basis(경로의존 펀드기여분)가 아님. 그건 펀드 전체수익률(ret)로만 반영.
+            pos_ret = (round((1 if w >= 0 else -1) * (px / entry - 1) * elev * 100, 2)
+                       if entry and px and entry > 0 and abs(w) > 1e-9 else 0.0)
             assets[c] = {
-                'weight': round(w, 1), 'return_pct': _pnlpct(apnl.get(c, 0.0), basis),
+                'weight': round(w, 1), 'return_pct': pos_ret,
                 'funding_carry': round(contrib, 2),
                 'avg_entry': round(entry, 4) if entry else None,
                 'price': px, 'liq_price': round(liq, 4) if liq else None,
