@@ -63,8 +63,12 @@ export default function AssetModal({ asset, onClose }) {
   }, [sym]);
   useEffect(() => {
     const bSym = relAsset.symbol;
+    let alive = true;                 // 경쟁 조건: 늦게 온 이전 요청이 최신을 덮지 않게
+    setRel([]);                       // 전환 시 즉시 클리어 (stale 방지 + 강제 리드로우)
     api(`/api/relative?a=${encodeURIComponent(sym)}&b=${encodeURIComponent(bSym)}&days=${days}&interval=${interval}`)
-      .then((d) => setRel(d.series)).catch(() => setRel([]));
+      .then((d) => { if (alive) setRel(d.series || []); })
+      .catch(() => { if (alive) setRel([]); });
+    return () => { alive = false; };
   }, [sym, relAsset, days, interval]);
 
   const h = hover;

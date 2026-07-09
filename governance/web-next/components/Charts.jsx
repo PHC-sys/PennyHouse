@@ -157,10 +157,9 @@ export function Line({ data, height = 200, color = '#5b8def', area = false, base
     return () => { ro.disconnect(); chart.remove(); chartRef.current = null; sRef.current = null; plRef.current = null; };
   }, [height, color, area]);
   useEffect(() => {
-    if (sRef.current && data && data.length) {
-      sRef.current.setData(dedupe(data));
-      chartRef.current?.timeScale().fitContent();
-    }
+    if (!sRef.current) return;
+    sRef.current.setData(dedupe(data || []));   // 빈 데이터면 클리어 (이전 차트 stale 방지)
+    if (data && data.length) chartRef.current?.timeScale().fitContent();
   }, [data]);
   // 기준선 (예: 현재 펀딩값)
   useEffect(() => {
