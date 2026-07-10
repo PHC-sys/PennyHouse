@@ -62,6 +62,11 @@ position_notional = |수량| × mark_price = (비중/100) × equity × leverage
 - 정확도 향상: HL 펀딩 정산 주기(★매시간 1h — 실측 확인. CEX 8h 아님)를 반영.
 
 ### 3-1b. 자산별 수익 기여도 (리밸런싱 정합)
+> ⚠️ **개정됨 (2026-07-10):** 아래 `asset_pnl += w·equity·lev·Δp` 방식은 **매시간 연속
+> 리밸런싱**이라, 실제 "투표때만 리밸·그 사이 노셔널 고정"과 어긋남이 검증으로 확인됨
+> (실측 +2.17% vs 정답 +3.67%). 또 실현손익 미저장으로 펀드가 늙으면 과거 손익이 drift함.
+> **손익 3-스트림 분리(평가/실현/펀딩)로 재작성 예정 →
+> `docs/specs/GovernanceFund_Accounting_spec.md` 참조.** 아래는 개정 전 기록.
 ```
 매 시점 코인별로 따로 적립 (그 시점 비중으로 그 구간 손익):
   asset_pnl[coin] += (weight[coin]/100) × equity × lev × daily_return[coin]
@@ -165,6 +170,15 @@ position_notional = |수량| × mark_price = (비중/100) × equity × leverage
   ✅ 실펀드(5차)는 원장 대신 HL clearinghouseState 읽어 같은 엔진 재사용 → 코드 공유
   근거/배경: mid/mark·재시작리셋·NAV절벽이 전부 "메모리 누적" 한 뿌리였음.
   자세한 설계 토론: Note/20260615 + 이 문서 5절(데이터 원천).
+
+3.7차 — 손익 회계 엔진 정합 (3-스트림)  ← 현재 (2026-07-10)
+  검증 중 회계 모델 결함 3건 발견. 상세: docs/specs/GovernanceFund_Accounting_spec.md
+  ✅ 종목 수익률 → 포지션 ROE (방향×(현재가/평단−1)×lev). 커밋 3ad8356 (문제 A)
+  □ 리밸 이벤트에 스냅샷 저장 {marks, realized_pnl, equity_after} (실현분 동결)
+  □ reconstruct 노셔널-고정 재작성 (연속 리밸런싱 버그 B) + 저장 실현분 사용 (drift C)
+  □ 펀딩 원장 신설·매시 누적 = 이자손익 스트림 (표시만 → 실현 반영, 문제 D)
+  □ 손익 귀속 UI: 매매/평가/펀딩 분해 표시
+  핵심: equity = 초기 + 실현_누적 + 펀딩_누적 + 평가_현재. 세 스트림 분리 저장(감사 가능).
 
 4차 — 게임형 (멀티펀드 위)
   □ 리플레이 모드: 과거 시점 시작 → 구간별 공개 → 투표 → 진행 →
@@ -277,6 +291,7 @@ position_notional = |수량| × mark_price = (비중/100) × equity × leverage
 ## 7. 관련 문서
 
 - `docs/specs/GovernanceFund_spec.md` — 펀드 본체 설계
+- `docs/specs/GovernanceFund_Accounting_spec.md` — **손익 회계 3-스트림 (평가/실현/펀딩)** ★ 신규
 - `docs/specs/GovernanceFund_Backtest_spec.md` — 백테스트/페이퍼 사이트 설계
 - `docs/guides/GovernanceFund_site_usage.md` — 사용법
 - `governance/` — 구현 (engine/api/web-next)

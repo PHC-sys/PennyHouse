@@ -399,11 +399,22 @@ subscribe()로 직접 청약, FCFS 방식
 
 ## 8. 다음에 해야 할 작업 (우선순위 순)
 
-### 🔴 최우선: GovernanceFund MVP
-- 스펙: `docs/specs/GovernanceFund_spec.md`
-- AI Keeper 프로토타입 (HL REST API 연동, 가중평균 비중 → 리밸런싱)
-- 웹 UI MVP (대시보드 + 투표 화면)
-- 오프체인 투표 집계 (DB)
+### 🔴 최우선: 손익 회계 엔진 3-스트림 재작성 (2026-07-10 진행 중)
+> GovernanceFund MVP·페이퍼·NAV 이벤트소싱은 이미 구축됨(로드맵 3.6차까지 완료).
+> 수익률 검증 중 **회계 모델 결함 3건** 발견 → 재작성 중. **새 세션은 여기부터.**
+- 스펙: `docs/specs/GovernanceFund_Accounting_spec.md` (★ 반드시 먼저 읽기)
+- 문제 A [✅ 커밋 3ad8356]: 종목 수익률이 경로의존 펀드기여분 → **포지션 ROE**로 수정
+- 문제 B [ ]: 펀드 수익률이 **매시간 연속 리밸런싱**(엔진) — 실제는 투표때만 리밸·노셔널 고정.
+  실측 +2.17%(엔진) vs +3.67%(정답). `nav.reconstruct` 노셔널-고정 재작성 필요.
+- 문제 C [ ]: **실현손익 미저장**(캔들 재계산) → 펀드 늙으면 캔들 해상도 바뀌며 과거 손익 drift.
+  리밸 이벤트에 `{marks, realized_pnl, equity_after}` 스냅샷 저장(동결) 필요.
+- 문제 D [ ]: **펀딩 미반영**(표시만) → 매시 정산 펀딩 원장 신설·누적 = 이자손익 스트림.
+- 목표: `equity = 초기 + 실현_누적 + 펀딩_누적 + 평가_현재` (평가/실현/이자 3분법, 분리 저장·감사 가능).
+- ⚠️ 신호전략(FSSC) 재탐색 금지 — no edge, OOS 전부 실패로 폐기됨.
+
+### (완료됨, 참고) GovernanceFund MVP
+- 스펙: `docs/specs/GovernanceFund_spec.md` · 로드맵: `docs/specs/GovernanceFund_Platform_roadmap.md`
+- 투표→비중 엔진, 백테스트/페이퍼, 멀티펀드(개설/회수/삭제), 마켓탭, NAV 이벤트소싱 = 구축 완료
 
 ### 🟡 병행: HyperEVM 배포 (StructuredBond)
 ```
